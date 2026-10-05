@@ -25,6 +25,7 @@ function(xxc_freestanding_compile_options target visibility)
                 -ffreestanding
                 -fno-builtin
                 -fno-stack-protector
+                -ftls-model=initial-exec
             )
 
             if (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
@@ -37,6 +38,8 @@ function(xxc_freestanding_compile_options target visibility)
 endfunction()
 
 function(xxc_freestanding_link_options target)
+    get_target_property(tgt_type ${target} TYPE)
+
     if (WIN32)
         target_link_libraries(${target} PRIVATE kernel32 ws2_32)
 
@@ -51,33 +54,32 @@ function(xxc_freestanding_link_options target)
                 /RTCc- /RTCs- /RTCu- /RTC1-
                 /Zl
                 /Gs9999999
-                /ENTRY:start
-                /SUBSYSTEM:CONSOLE
             )
+            if (NOT tgt_type STREQUAL "SHARED_LIBRARY")
+                target_link_options(${target} PRIVATE /ENTRY:start /SUBSYSTEM:CONSOLE)
+            endif()
         elseif (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
             target_link_options(${target} PRIVATE
                 -O3
                 -nostdlib
-                /ENTRY:start
-                /SUBSYSTEM:CONSOLE
             )
+            if (NOT tgt_type STREQUAL "SHARED_LIBRARY")
+                target_link_options(${target} PRIVATE /ENTRY:start /SUBSYSTEM:CONSOLE)
+            endif()
         elseif (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-            if (MINGW OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-                # GNU ld linker (GCC or Clang targeting MinGW)
-                target_link_options(${target} PRIVATE
-                    -O3
-                    -nostdlib
-                    "LINKER:-e,start"
-                    "LINKER:--subsystem,console"
-                )
-            else()
-                # lld-link linker (Clang targeting MSVC ABI on Windows)
-                target_link_options(${target} PRIVATE
-                    -O3
-                    -nostdlib
-                    "LINKER:/ENTRY:start"
-                    "LINKER:/SUBSYSTEM:CONSOLE"
-                )
+            target_link_options(${target} PRIVATE -O3 -nostdlib)
+            if (NOT tgt_type STREQUAL "SHARED_LIBRARY")
+                if (MINGW OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
+                    target_link_options(${target} PRIVATE
+                        "LINKER:-e,start"
+                        "LINKER:--subsystem,console"
+                    )
+                else()
+                    target_link_options(${target} PRIVATE
+                        "LINKER:/ENTRY:start"
+                        "LINKER:/SUBSYSTEM:CONSOLE"
+                    )
+                endif()
             endif()
         endif()
     elseif (LINUX)
@@ -87,9 +89,10 @@ function(xxc_freestanding_link_options target)
                 -flto
                 -nostdlib
                 -fno-builtin
-                -static
-                -no-pie
             )
+            if (NOT tgt_type STREQUAL "SHARED_LIBRARY")
+                target_link_options(${target} PRIVATE -static -no-pie)
+            endif()
         endif()
     endif()
 endfunction()

@@ -5,6 +5,7 @@
 #ifndef IO_H
 #define IO_H
 
+#include <def.h>
 #include <dstr.h>
 #include <parr.h>
 

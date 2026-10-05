@@ -13,7 +13,8 @@ endif()
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-option(XXC_BUILD_DEMO "Build the ++C demo executable" ${PROJECT_IS_TOP_LEVEL})
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 option(XXC_BUILD_TEST "Build the ++C test executable" ${PROJECT_IS_TOP_LEVEL})
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileOptions.cmake")
@@ -21,28 +22,6 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileOptions.cmake")
 add_subdirectory(platform)
 add_subdirectory(libminicrt)
 add_subdirectory(libxxc)
-
-if (XXC_BUILD_DEMO)
-    set_source_files_properties(
-        "${CMAKE_CURRENT_SOURCE_DIR}/examples/app-demo.ppc"
-        "${CMAKE_CURRENT_SOURCE_DIR}/examples/socket-demo.ppc"
-        PROPERTIES LANGUAGE C
-    )
-
-    add_executable(xxc_demo_app "${CMAKE_CURRENT_SOURCE_DIR}/examples/app-demo.ppc")
-    set_target_properties(xxc_demo_app PROPERTIES OUTPUT_NAME app)
-    target_link_libraries(xxc_demo_app PRIVATE xxc::xxc)
-
-    xxc_freestanding_compile_options(xxc_demo_app PRIVATE)
-    xxc_freestanding_link_options(xxc_demo_app)
-
-    add_executable(xxc_demo_socket "${CMAKE_CURRENT_SOURCE_DIR}/examples/socket-demo.ppc")
-    set_target_properties(xxc_demo_socket PROPERTIES OUTPUT_NAME socket)
-    target_link_libraries(xxc_demo_socket PRIVATE xxc::xxc)
-
-    xxc_freestanding_compile_options(xxc_demo_socket PRIVATE)
-    xxc_freestanding_link_options(xxc_demo_socket)
-endif()
 
 if (XXC_BUILD_TEST)
     add_custom_target(check)
@@ -61,3 +40,13 @@ if (XXC_BUILD_TEST)
     xxc_add_test(test         test/test.ppc)
     xxc_add_test(leak_test    test/leak.ppc)
 endif()
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_DEB_COMPONENT_INSTALL ON)
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "plusplusc")
+set(CPACK_PACKAGE_NAME "plusplusc")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_DEBIAN_LIBXXC_PACKAGE_NAME "libxxc")
+set(CPACK_DEBIAN_LIBXXC-HEADERS_PACKAGE_NAME "libxxc-headers")
+set(CPACK_DEBIAN_LIBXXC-HEADERS_PACKAGE_DEPENDS "libxxc (= ${PROJECT_VERSION})")
+include(CPack)

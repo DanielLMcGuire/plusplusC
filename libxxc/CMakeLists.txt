@@ -15,7 +15,7 @@ if (NOT TARGET xxc)
 
     add_library(xxc STATIC
         ${XXC_SOURCES}
-     ${CMAKE_CURRENT_SOURCE_DIR}/include/class.pph
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/class.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/app.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/argparse.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/stream.pph
@@ -26,12 +26,27 @@ if (NOT TARGET xxc)
         ${CMAKE_CURRENT_SOURCE_DIR}/include/runnable.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/thread.pph
     )
+    
+    add_library(xxc_shared SHARED ${XXC_SOURCES})
     add_library(xxc::xxc ALIAS xxc)
+    set_target_properties(xxc_shared PROPERTIES OUTPUT_NAME xxc)
 
     target_link_libraries(xxc PUBLIC xxc::minicrt)
+    target_link_libraries(xxc_shared PUBLIC minicrt_shared)
     target_link_libraries(minicrt PUBLIC xxc)
 
-    target_include_directories(xxc PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    )
+    foreach(tgt xxc xxc_shared)
+        target_include_directories(${tgt} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+        xxc_freestanding_compile_options(${tgt} PUBLIC)
+    endforeach()
+    
+    xxc_freestanding_link_options(xxc_shared)
+
+    # Installation rules for CPack
+    install(TARGETS xxc xxc_shared
+            LIBRARY DESTINATION lib COMPONENT libxxc
+            ARCHIVE DESTINATION lib COMPONENT libxxc-headers
+            RUNTIME DESTINATION bin COMPONENT libxxc)
+            
+    install(DIRECTORY include/ DESTINATION include/xxc COMPONENT libxxc-headers)
 endif()

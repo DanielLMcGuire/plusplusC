@@ -9,6 +9,7 @@
 #define AT_PHDR   3
 #define AT_PHENT  4
 #define AT_PHNUM  5
+#define AT_BASE   7
 #define PT_PHDR   6
 #define PT_TLS    7
 
@@ -140,8 +141,26 @@ void __xxc_fill_user_desc(struct xxc_thread *t, void *tp)
 }
 #endif
 
+static int has_interp(int argc, char **argv)
+{
+    char **envp = argv + argc + 1;
+    while (*envp) envp++;
+    for (const unsigned long *av = (const unsigned long *)(envp + 1); av[0] != AT_NULL; av += 2)
+        if (av[0] == AT_BASE) return av[1] != 0;
+    return 0;
+}
+
 void __xxc_linux_init(int argc, char **argv)
 {
+    if (has_interp(argc, argv))
+    {
+        struct xxc_thread *t = &__xxc_main_thread;
+        t->self = t;
+        atomic_i32_init(&t->tid, (i32)sys_gettid());
+        atomic_i32_init(&t->state, XXC_THREAD_DETACHED);
+        __xxc_self = t;
+        return;
+    }
     tls_scan(argc, argv);
 
     size_t len = align_up_u(__xxc_tls_area_size() + 64, 4096);
