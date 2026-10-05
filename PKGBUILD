@@ -1,6 +1,6 @@
 pkgbase=libxxc
 pkgname=(libxxc libxxc-headers)
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='++C class library and libminicrt freestanding C runtime'
 arch=(x86_64)
