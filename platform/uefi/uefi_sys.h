@@ -5,7 +5,7 @@
 #ifndef UEFI_SYS_H
 #define UEFI_SYS_H
 
-#include "../../libminicrt/include/def.h"
+#include <def.h>
 #include "uefi.h"
 
 extern EFI_SYSTEM_TABLE *__uefi_st;

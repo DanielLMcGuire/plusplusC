@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
-#include "../../libminicrt/include/def.h"
+#include <def.h>
 
 // alloc.h
 extern void* malloc(size_t size);

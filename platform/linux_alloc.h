@@ -5,7 +5,7 @@
 #ifndef LINUX_ALLOC_H
 #define LINUX_ALLOC_H
 
-#include "../libminicrt/include/def.h"
+#include <def.h>
 #include "sys_linux.h"
 
 void  *__linux_malloc(size_t size);

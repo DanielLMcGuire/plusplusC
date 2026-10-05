@@ -37,6 +37,12 @@ if (LINUX AND NOT TARGET sys_linux)
 
     xxc_freestanding_compile_options(sys_linux PRIVATE)
 
+    install(FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/sys_linux.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/linux_alloc.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/linux_thread.h
+        DESTINATION include/minicrt
+        COMPONENT libxxc-headers)
     install(DIRECTORY linux/ DESTINATION include/minicrt COMPONENT libxxc-headers FILES_MATCHING PATTERN "*.h")
 
     add_library(minicrt_crt0 OBJECT linux/crt0_${CMAKE_SYSTEM_PROCESSOR_NORM}.s)
