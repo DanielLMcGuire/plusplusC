@@ -40,8 +40,6 @@ if (LINUX AND NOT TARGET sys_linux)
     install(DIRECTORY linux/ DESTINATION include/minicrt COMPONENT libxxc-headers FILES_MATCHING PATTERN "*.h")
 
     add_library(minicrt_crt0 OBJECT linux/crt0_${CMAKE_SYSTEM_PROCESSOR_NORM}.s)
-
-    add_library(minicrt_crt0 OBJECT linux/crt0_${CMAKE_SYSTEM_PROCESSOR_NORM}.s)
     install(FILES $<TARGET_OBJECTS:minicrt_crt0>
             DESTINATION lib/minicrt
             RENAME crt0.o
