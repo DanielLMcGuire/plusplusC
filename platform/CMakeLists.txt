@@ -57,6 +57,11 @@ elseif (WIN32 AND NOT TARGET sys_win32)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     )
 
+    target_include_directories(sys_win32 PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../libminicrt/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../libminicrt/internal
+    )
+
     target_compile_definitions(sys_win32 PRIVATE
         _CORECRT_BUILD
         WIN32_LEAN_AND_MEAN

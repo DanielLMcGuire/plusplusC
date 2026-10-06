@@ -47,25 +47,32 @@ if (NOT TARGET minicrt)
     )
 
     add_library(minicrt STATIC ${MINICRT_SOURCES})
-    add_library(minicrt_shared SHARED ${MINICRT_SOURCES})
-    
     add_library(xxc::minicrt ALIAS minicrt)
-    set_target_properties(minicrt_shared PROPERTIES OUTPUT_NAME minicrt)
+
+    set(MINICRT_TARGETS minicrt)
+    if (NOT WIN32)
+        add_library(minicrt_shared SHARED ${MINICRT_SOURCES})
+        set_target_properties(minicrt_shared PROPERTIES OUTPUT_NAME minicrt_shared)
+        list(APPEND MINICRT_TARGETS minicrt_shared)
+    endif()
 
     if (LINUX)
         target_link_libraries(minicrt PUBLIC sys_linux)
-        target_link_libraries(minicrt_shared PUBLIC sys_linux)
+        if (TARGET minicrt_shared)
+            target_link_libraries(minicrt_shared PUBLIC sys_linux)
+        endif()
 
         if (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|i.86|x86" AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
             target_link_libraries(minicrt PUBLIC gcc)
-            target_link_libraries(minicrt_shared PUBLIC gcc)
+            if (TARGET minicrt_shared)
+                target_link_libraries(minicrt_shared PUBLIC gcc)
+            endif()
         endif()
     elseif (WIN32)
         target_link_libraries(minicrt PUBLIC sys_win32 kernel32 ws2_32)
-        target_link_libraries(minicrt_shared PUBLIC sys_win32 kernel32 ws2_32)
     endif()
 
-    foreach(tgt minicrt minicrt_shared)
+    foreach(tgt IN LISTS MINICRT_TARGETS)
         target_include_directories(${tgt} PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
@@ -77,10 +84,12 @@ if (NOT TARGET minicrt)
         xxc_freestanding_compile_options(${tgt} PUBLIC)
     endforeach()
 
-    xxc_freestanding_link_options(minicrt_shared)
+    if (TARGET minicrt_shared)
+        xxc_freestanding_link_options(minicrt_shared)
+    endif()
 
     # Installation rules for CPack
-    install(TARGETS minicrt minicrt_shared
+    install(TARGETS ${MINICRT_TARGETS}
             LIBRARY DESTINATION lib COMPONENT libxxc
             ARCHIVE DESTINATION lib COMPONENT libxxc-headers
             RUNTIME DESTINATION bin COMPONENT libxxc)
