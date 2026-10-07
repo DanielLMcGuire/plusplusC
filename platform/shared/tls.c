@@ -19,6 +19,28 @@ typedef struct { u32 p_type, p_flags; u64 p_offset, p_vaddr, p_paddr, p_filesz, 
 typedef struct { u32 p_type, p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_flags, p_align; } xxc_phdr_t;
 #endif
 
+#define PT_DYNAMIC 2
+#define DT_DEBUG   21
+
+#if defined(__x86_64__) || defined(__aarch64__)
+typedef struct { unsigned char e_ident[16]; u16 e_type, e_machine; u32 e_version; u64 e_entry, e_phoff, e_shoff; u32 e_flags; u16 e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx; } xxc_ehdr_t;
+typedef struct { i64 d_tag; u64 d_val; } xxc_dyn_t;
+typedef u64 xxc_addr_t;
+#else
+typedef struct { unsigned char e_ident[16]; u16 e_type, e_machine; u32 e_version, e_entry, e_phoff, e_shoff, e_flags; u16 e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx; } xxc_ehdr_t;
+typedef struct { i32 d_tag; u32 d_val; } xxc_dyn_t;
+typedef u32 xxc_addr_t;
+#endif
+
+typedef struct xxc_link_map {
+    xxc_addr_t           l_addr;
+    char                *l_name;
+    xxc_dyn_t           *l_ld;
+    struct xxc_link_map *l_next, *l_prev;
+} xxc_link_map_t;
+
+typedef struct { int r_version; xxc_link_map_t *r_map; } xxc_r_debug_t;
+
 #define XXC_TCB_SIZE 16
 
 __thread struct xxc_thread *__xxc_self;
@@ -153,10 +175,100 @@ static int has_interp(int argc, char **argv)
     return 0;
 }
 
+static void *get_thread_pointer(void)
+{
+    void *tp;
+#if defined(__x86_64__)
+    __asm__ volatile("movq %%fs:0, %0" : "=r"(tp));
+#elif defined(__i386__)
+    __asm__ volatile("movl %%gs:0, %0" : "=r"(tp));
+#elif defined(__aarch64__)
+    __asm__ volatile("mrs %0, tpidr_el0" : "=r"(tp));
+#endif
+    return tp;
+}
+
+static void tls_accum(const xxc_phdr_t *ph, size_t phnum, size_t *total, size_t *maxal)
+{
+    for (size_t i = 0; i < phnum; i++)
+    {
+        if (ph[i].p_type != PT_TLS) continue;
+        size_t al = ph[i].p_align ? (size_t)ph[i].p_align : 1;
+        *total += (size_t)align_up_u((uintptr_t)ph[i].p_memsz, al) + al;
+        if (al > *maxal) *maxal = al;
+    }
+}
+
+static int tls_snapshot_dynamic(int argc, char **argv)
+{
+    char **envp = argv + argc + 1;
+    while (*envp) envp++;
+    const unsigned long *av = (const unsigned long *)(envp + 1);
+
+    const xxc_phdr_t *ph = NULL;
+    size_t phnum = 0;
+    for (; av[0] != AT_NULL; av += 2)
+    {
+        if (av[0] == AT_PHDR)  ph = (const xxc_phdr_t *)av[1];
+        if (av[0] == AT_PHNUM) phnum = (size_t)av[1];
+    }
+    if (!ph) return 0;
+
+    uintptr_t bias = 0;
+    for (size_t i = 0; i < phnum; i++)
+        if (ph[i].p_type == PT_PHDR) { bias = (uintptr_t)ph - (uintptr_t)ph[i].p_vaddr; break; }
+
+    xxc_r_debug_t *rd = NULL;
+    for (size_t i = 0; i < phnum && !rd; i++)
+    {
+        if (ph[i].p_type != PT_DYNAMIC) continue;
+        for (const xxc_dyn_t *d = (const xxc_dyn_t *)(bias + (uintptr_t)ph[i].p_vaddr); d->d_tag != 0; d++)
+            if (d->d_tag == DT_DEBUG) { rd = (xxc_r_debug_t *)(uintptr_t)d->d_val; break; }
+    }
+    if (!rd || !rd->r_map) return 0;
+
+    size_t total = 0, maxal = 1;
+
+    tls_accum(ph, phnum, &total, &maxal);
+
+    for (const xxc_link_map_t *m = rd->r_map->l_next; m; m = m->l_next)
+    {
+        const xxc_ehdr_t *eh = (const xxc_ehdr_t *)(uintptr_t)m->l_addr;
+        if (!eh || eh->e_ident[0] != 0x7f || eh->e_ident[1] != 'E' ||
+            eh->e_ident[2] != 'L'  || eh->e_ident[3] != 'F')
+            continue;
+        tls_accum((const xxc_phdr_t *)((const char *)eh + eh->e_phoff), eh->e_phnum, &total, &maxal);
+    }
+
+    if (!total) return 0;
+
+    size_t a = maxal < 16 ? 16 : maxal;
+    size_t n = (size_t)align_up_u(total, a);
+
+    char *snap = (char *)sys_mmap(NULL, align_up_u(n, 4096), PROT_READ | PROT_WRITE,
+                                  MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (!snap) return 0;
+
+    const char *tp = (const char *)get_thread_pointer();
+#if defined(__aarch64__)
+    memcpy(snap, tp + XXC_TCB_SIZE, n);
+    g_tls.off = XXC_TCB_SIZE;
+#else
+    memcpy(snap, tp - n, n);
+    g_tls.off = n;
+#endif
+    g_tls.image  = snap;
+    g_tls.filesz = n;
+    g_tls.memsz  = n;
+    g_tls.align  = a;
+    return 1;
+}
+
 void __xxc_platform_init(int argc, char **argv)
 {
     if (has_interp(argc, argv))
     {
+        (void)tls_snapshot_dynamic(argc, argv);
         struct xxc_thread *t = &__xxc_main_thread;
         t->self = t;
         atomic_i32_init(&t->tid, (i32)sys_gettid());

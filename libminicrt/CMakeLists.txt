@@ -115,7 +115,10 @@ if (NOT TARGET minicrt)
     add_library(xxc::minicrt ALIAS minicrt)
 
     set(MINICRT_TARGETS minicrt)
-    add_library(minicrt_shared SHARED $<TARGET_OBJECTS:minicrt_objects>)
+    add_library(minicrt_shared SHARED
+        $<TARGET_OBJECTS:minicrt_objects>
+        $<$<NOT:$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_SOURCE_DIR}/src/crt1.c>
+    )
     set_target_properties(minicrt_shared PROPERTIES
         RUNTIME_OUTPUT_NAME minicrt
         LIBRARY_OUTPUT_NAME minicrt

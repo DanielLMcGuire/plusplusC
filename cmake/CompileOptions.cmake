@@ -99,7 +99,19 @@ function(xxc_freestanding_link_options target)
                 -nostdlib
                 -fno-builtin
             )
-            if (NOT tgt_type STREQUAL "SHARED_LIBRARY")
+
+            set(_xxc_target_uses_shared FALSE)
+            get_target_property(_xxc_target_link_libs ${target} LINK_LIBRARIES)
+            if (_xxc_target_link_libs)
+                foreach(_xxc_lib IN LISTS _xxc_target_link_libs)
+                    if (_xxc_lib MATCHES "(_shared|::.*_shared)")
+                        set(_xxc_target_uses_shared TRUE)
+                        break()
+                    endif()
+                endforeach()
+            endif()
+
+            if (NOT tgt_type STREQUAL "SHARED_LIBRARY" AND NOT _xxc_target_uses_shared)
                 target_link_options(${target} PRIVATE -static -no-pie)
             endif()
         endif()

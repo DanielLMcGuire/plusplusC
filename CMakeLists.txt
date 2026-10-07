@@ -30,22 +30,22 @@ add_subdirectory(platform)
 add_subdirectory(libminicrt)
 add_subdirectory(libxxc)
 
+if (TARGET sys_win32)
+    set(XXC_EXEC_CRT0 $<TARGET_OBJECTS:sys_win32>)
+elseif (TARGET minicrt_crt0)
+    set(XXC_EXEC_CRT0 $<TARGET_OBJECTS:minicrt_crt0>)
+else()
+    set(XXC_EXEC_CRT0)
+endif()
+
+if (WIN32 AND (XXC_TESTS_USES_SHARED OR XXC_DEMO_USES_SHARED))
+    set(XXC_EXEC_STARTUP "${CMAKE_CURRENT_SOURCE_DIR}/libminicrt/src/crt1.c")
+else()
+    set(XXC_EXEC_STARTUP)
+endif()
+
 if (XXC_BUILD_TEST)
     add_custom_target(check)
-
-    if (TARGET sys_win32)
-        set(XXC_EXEC_CRT0 $<TARGET_OBJECTS:sys_win32>)
-    elseif (TARGET minicrt_crt0)
-        set(XXC_EXEC_CRT0 $<TARGET_OBJECTS:minicrt_crt0>)
-    else()
-        set(XXC_EXEC_CRT0)
-    endif()
-
-    if (WIN32 AND (XXC_TESTS_USES_SHARED OR XXC_DEMO_USES_SHARED))
-        set(XXC_EXEC_STARTUP "${CMAKE_CURRENT_SOURCE_DIR}/libminicrt/src/crt1.c")
-    else()
-        set(XXC_EXEC_STARTUP)
-    endif()
 
     function(xxc_add_test name source)
         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/${source}" PROPERTIES LANGUAGE C)
@@ -65,6 +65,12 @@ if (XXC_BUILD_TEST)
         endif()
 
         target_link_libraries(xxc_${name} PRIVATE ${XXC_TEST_LIB})
+        if (XXC_TESTS_USES_SHARED)
+            set_target_properties(xxc_${name} PROPERTIES
+                BUILD_RPATH "${CMAKE_BINARY_DIR}"
+                INSTALL_RPATH "$ORIGIN"
+            )
+        endif()
         xxc_freestanding_compile_options(xxc_${name} PRIVATE)
         xxc_freestanding_link_options(xxc_${name})
         add_custom_target(run_${name} COMMAND xxc_${name} DEPENDS xxc_${name} USES_TERMINAL)
@@ -96,6 +102,12 @@ if (XXC_BUILD_DEMO)
         target_compile_definitions(xxc_demo_app PRIVATE XXC_USING_SHARED_LIB)
     endif()
     target_link_libraries(xxc_demo_app PRIVATE ${XXC_DEMO_LIB})
+    if (XXC_DEMO_USES_SHARED)
+        set_target_properties(xxc_demo_app PROPERTIES
+            BUILD_RPATH "${CMAKE_BINARY_DIR}"
+            INSTALL_RPATH "$ORIGIN"
+        )
+    endif()
 
     xxc_freestanding_compile_options(xxc_demo_app PRIVATE)
     xxc_freestanding_link_options(xxc_demo_app)
@@ -106,6 +118,12 @@ if (XXC_BUILD_DEMO)
         target_compile_definitions(xxc_demo_socket PRIVATE XXC_USING_SHARED_LIB)
     endif()
     target_link_libraries(xxc_demo_socket PRIVATE ${XXC_DEMO_LIB})
+    if (XXC_DEMO_USES_SHARED)
+        set_target_properties(xxc_demo_socket PROPERTIES
+            BUILD_RPATH "${CMAKE_BINARY_DIR}"
+            INSTALL_RPATH "$ORIGIN"
+        )
+    endif()
 
     xxc_freestanding_compile_options(xxc_demo_socket PRIVATE)
     xxc_freestanding_link_options(xxc_demo_socket)
