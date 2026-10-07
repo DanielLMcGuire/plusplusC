@@ -4,3 +4,4 @@
 **/*.inl linguist-language=C
 **/*.s linguist-language=Assembly
 **/Makefile.* linguist-language=Makefile
+**/*.mk linguist-language=Makefile
