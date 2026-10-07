@@ -69,21 +69,27 @@ int program(parr_t csArgs)
 ### Prerequisites
 
 - Linux (x86_64, x86, aarch64)
-  - CMake 3.25+
+  - CMake 3.25+ / GNU Make
   - GCC 13+ or Clang 16+
   - as / GNU Assembler / GCC / Clang
 - FreeBSD (x86_64, aarch64)
-  - CMake 3.25+, Ninja (`pkg install cmake ninja`)
+  - CMake 3.25+ & Ninja (`pkg install cmake ninja`) / GNU Make
   - Clang + lld from the base system
   - aarch64 also links `libcompiler_rt` (in base) for 128-bit `long double` helpers
 - Windows (x86_64, x86, aarch64)
   - CMake 3.25+ (Usually bundled with MSVC)
   - MSVC 2022+ or Clang (targeting MinGW or MSVC ABI)
+  - Windows 7+ win32 API
+
+Linux
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 
 cmake --build build
+
+# make can be used (without cmake)
+# make help
 
 ./build/main
 ```
@@ -93,6 +99,9 @@ FreeBSD
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+
+# make can be used (without cmake)
+# make help
 
 ./build/test
 ```
