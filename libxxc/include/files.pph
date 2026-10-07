@@ -9,6 +9,7 @@
 #include <class.pph>
 #include <dstr.h>
 #include <stream.pph>
+#include <fs.pph>
 
 CLASS(FileStream, Stream)
 {
@@ -35,7 +36,8 @@ METHOD_PROTO(FileStream, i64, tell, (void *self));
 METHOD_PROTO(FileStream, int, eof, (void *self));
 METHOD_PROTO(FileStream, void, close, (void *self));
 
-Stream *fopen(const char *path, const char *mode);
+Stream *fopen(FSPath *path, const char *mode);
+Stream *fopen_str(const char *path, const char *mode);
 
 i64 fwrite(Stream *s, const char *str);
 i64 freadline(Stream *s, dstr_t *out);

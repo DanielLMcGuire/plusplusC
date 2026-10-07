@@ -35,15 +35,24 @@ CONSTRUCTOR(IoTest)
 
 DECONSTRUCTOR(IoTest) { SUPER_DTOR(self, Application); }
 
-static bool file_starts_with(const char *path, const char *prefix)
+static bool file_starts_with_str(const char *path, const char *prefix)
 {
-    Stream *f = fopen(path, "r");
+    if (!path || !prefix) return false;
+    SCOPED Stream *f = fopen_str(path, "r");
     if (!f) return false;
     char buf[64] = {0};
     size_t n = strlen(prefix);
     i64 got = CALL2(f, read, buf, n);
-    REMOVE(f);
     return got == (i64)n && memcmp(buf, prefix, n) == 0;
+}
+
+static bool file_starts_with(FSPath *path, const char *prefix)
+{
+    if (!path || !prefix) return false;
+    dstr_t pathStr = CALL0(path, data);
+    bool ok = file_starts_with_str(pathStr.data, prefix);
+    dstr_free(&pathStr);
+    return ok;
 }
 
 static void test_clock(void)
@@ -73,7 +82,9 @@ static void test_files(void)
     char buf[16];
     dstr_t line;
 
-    Stream *f = fopen("io_test.txt", "w");
+    const char path[] = "io_test.txt";
+
+    Stream *f = fopen_str(path, "w");
     CHECK(f != NULL);
     if (!f) return;
     CALL1(f, fprintln, "hello from ++C");
@@ -81,7 +92,7 @@ static void test_files(void)
     CALL1(f, fprint, "tail");
     REMOVE(f);
 
-    f = fopen("io_test.txt", "r");
+    f = fopen_str(path, "r");
     CHECK(f != NULL);
     freadline(f, &line);
     CHECK(strcmp(line.data, "hello from ++C") == 0);
@@ -99,54 +110,56 @@ static void test_files(void)
     CHECK(CALL2(f, write, "x", 1) < 0);
     REMOVE(f);
 
-    f = fopen("io_test.txt", "a");
+    f = fopen_str(path, "a");
     CHECK(f != NULL);
     CALL1(f, fprintln, "+appended");
     REMOVE(f);
-    f = fopen("io_test.txt", "r");
+    f = fopen_str(path, "r");
     CHECK(CALL2(f, seek, 0, FS_SEEK_END) == 34);
     REMOVE(f);
 
-    f = fopen("io_test.txt", "r+");
+    f = fopen_str(path, "r+");
     CHECK(f != NULL);
     CALL2(f, seek, 0, FS_SEEK_SET);
     CALL1(f, fprint, "HELLO");
     REMOVE(f);
-    CHECK(file_starts_with("io_test.txt", "HELLO from ++C"));
+    dstr_t pathStr = dstr_new(path);
+    CHECK(file_starts_with(fs_path(pathStr), "HELLO from ++C"));
+    dstr_free(&pathStr);
 
-    f = fopen("io_test.txt", "w");
+    f = fopen_str(path, "w");
     REMOVE(f);
-    f = fopen("io_test.txt", "r");
+    f = fopen_str(path, "r");
     CHECK(CALL2(f, seek, 0, FS_SEEK_END) == 0);
     REMOVE(f);
 
-    CHECK(fopen("no_such_file.txt", "r") == NULL);
-    CHECK(fopen("no_such_dir/x.txt", "w") == NULL);
-    CHECK(fopen("io_test.txt", "z") == NULL);
+    CHECK(fopen_str("no_such_file.txt", "r") == NULL);
+    CHECK(fopen_str("no_such_dir/x.txt", "w") == NULL);
+    CHECK(fopen_str(path, "z") == NULL);
 
-    f = fopen("EFI/BOOT/BOOTX64.EFI", "r");
+    f = fopen_str("EFI/BOOT/BOOTX64.EFI", "r");
     CHECK(f != NULL);
     if (f)
     {
         CHECK(CALL2(f, seek, 0, FS_SEEK_END) > 1000);
         REMOVE(f);
     }
-    CHECK(file_starts_with("EFI/BOOT/BOOTX64.EFI", "MZ"));
-    CHECK(file_starts_with("\\EFI\\BOOT\\BOOTX64.EFI", "MZ"));
+    CHECK(file_starts_with_str("EFI/BOOT/BOOTX64.EFI", "MZ"));
+    CHECK(file_starts_with_str("\\EFI\\BOOT\\BOOTX64.EFI", "MZ"));
 
     dstr_t nm = dstr_new("tmp_touch.txt");
     FSPath *p = fs_path(nm);
     dstr_free(&nm);
     CHECK(CALL0(p, touch));
-    f = fopen("tmp_touch.txt", "r");
+    f = fopen_str("tmp_touch.txt", "r");
     CHECK(f != NULL);
     REMOVE(f);
     CHECK(CALL0(p, remove));
-    CHECK(fopen("tmp_touch.txt", "r") == NULL);
+    CHECK(fopen_str("tmp_touch.txt", "r") == NULL);
     CHECK(!CALL0(p, remove));
     REMOVE(p);
 
-    f = fopen("io_test.txt", "w");
+    f = fopen_str(path, "w");
     CALL1(f, fprintln, "written by ++C running on bare metal");
     REMOVE(f);
 }

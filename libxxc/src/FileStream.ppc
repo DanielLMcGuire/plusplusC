@@ -252,11 +252,8 @@ IMPLEMENT(FileStream, void, close, (void *self))
     __crt_lock_release(&this->base.lock);
 }
 
-Stream *fopen(const char *path, const char *mode)
+static inline Stream *__fopen(const char *path, const char *mode)
 {
-    if (!path || !mode || !mode[0])
-        return NULL;
-
 #if defined(_WIN32)
 
     DWORD access;
@@ -379,7 +376,9 @@ Stream *fopen(const char *path, const char *mode)
     );
 
     if (fd < 0)
+    {
         return NULL;
+    }
 
     FileStream *fs = NEW(FileStream);
 
@@ -403,6 +402,29 @@ Stream *fopen(const char *path, const char *mode)
     return NULL;
 
 #endif
+}
+
+Stream *fopen(FSPath *path, const char *mode)
+{
+    dstr_t dsPath = CALL0(path, data);
+    char *csPath = dsPath.data;
+    if (!path || !mode || !mode[0])
+    {
+        dstr_free(&dsPath);
+        return NULL;
+    }
+
+    Stream *s = __fopen(csPath, mode);
+    dstr_free(&dsPath);
+    return s;
+}
+
+Stream *fopen_str(const char *path, const char *mode)
+{
+    if (!path || !mode || !mode[0])
+        return NULL;
+
+    return __fopen(path, mode);
 }
 
 static FileStream *g_stdin_stream;

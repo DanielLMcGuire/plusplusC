@@ -16,7 +16,7 @@ static CHAR16 g_cmdline[1024];
 
 static bool read_all(const char *path, u8 **out, size_t *size)
 {
-    SCOPED Stream *f = fopen(path, "r");
+    SCOPED Stream *f = fopen_str(path, "r");
     if (!f) return false;
 
     CALL2(f, seek, 0, FS_SEEK_END);
