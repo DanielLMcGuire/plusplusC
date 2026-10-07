@@ -12,17 +12,18 @@
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-    #define XXC_LIKELY(x)   __builtin_expect(!!(x), 1)
-    #define XXC_UNLIKELY(x) __builtin_expect(!!(x), 0)
-    #define XXC_NOINLINE    __attribute__((noinline))
-    #define XXC_NORETURN    __attribute__((noreturn))
-    #define XXC_UNUSED      __attribute__((unused))
-    #define XXC_USED      __attribute__((used))
+    #define XXC_LIKELY(x)    __builtin_expect(!!(x), 1)
+    #define XXC_UNLIKELY(x)  __builtin_expect(!!(x), 0)
+    #define XXC_NOINLINE     __attribute__((noinline))
+    #define XXC_NORETURN     __attribute__((noreturn))
+    #define XXC_UNUSED       __attribute__((unused))
+    #define XXC_LABEL_UNUSED __attribute__((unused))
+    #define XXC_USED         __attribute__((used))
 #elif defined(_MSC_VER)
     #define XXC_LIKELY(x)   (x)
     #define XXC_UNLIKELY(x) (x)
-    #define XXC_NOINLINE    __declspec(noinline)
-    #define XXC_NORETURN    __declspec(noreturn)
+    #define XXC_NOINLINE     __declspec(noinline)
+    #define XXC_NORETURN     __declspec(noreturn)
     #define XXC_UNUSED
     #define XXC_USED
 #else
@@ -31,6 +32,7 @@
     #define XXC_NOINLINE
     #define XXC_NORETURN
     #define XXC_UNUSED
+    #define XXC_LABEL_UNUSED
     #define XXC_USED
 #endif
 

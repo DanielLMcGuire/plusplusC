@@ -85,7 +85,6 @@ CLASS_INFO(Demo, Application);
 
 CONSTRUCTOR(Demo)
 {
-    Demo *this = (Demo *)self;
     SUPER_CTOR(self, Application);
 
     METHOD_LINK(base, Demo, configure_args);
@@ -95,7 +94,6 @@ CONSTRUCTOR(Demo)
 
 DECONSTRUCTOR(Demo)
 {
-    Demo *this = (Demo *)self;
     SUPER_DTOR(self, Application);
 }
 

@@ -46,11 +46,11 @@ static void *server_thread_func(void *arg)
 static void *client_thread_func(void *arg)
 {
     SocketDemo *self = (SocketDemo *)arg;
-    
+
     while (!atomic_bool_load(&g_server_ready))
         thread_sleep_ms(10);
-    
-        CALL0(self, run_client);
+
+    CALL0(self, run_client);
     return NULL;
 }
 

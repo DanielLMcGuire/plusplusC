@@ -112,7 +112,7 @@ IMPLEMENT(FileStream, i64, read, (void *self, void *buf, size_t n))
     result = r;
 #endif
 
-done:
+done: XXC_LABEL_UNUSED;
     __crt_lock_release(&this->base.lock);
     return result;
 }
@@ -143,7 +143,7 @@ IMPLEMENT(FileStream, i64, write, (void *self, const void *buf, size_t n))
     result = sys_write(this->fd, buf, n);
 #endif
 
-done:
+done: XXC_LABEL_UNUSED;
     __crt_lock_release(&this->base.lock);
     return result;
 }
@@ -185,7 +185,7 @@ IMPLEMENT(FileStream, i64, seek, (void *self, i64 offset, int whence))
     result = r;
 #endif
 
-done:
+done: XXC_LABEL_UNUSED;
     __crt_lock_release(&this->base.lock);
     return result;
 }
@@ -210,7 +210,7 @@ IMPLEMENT(FileStream, i64, tell, (void *self))
     result = sys_lseek(this->fd, 0, FS_SEEK_CUR);
 #endif
 
-done:
+done: XXC_LABEL_UNUSED;
     __crt_lock_release(&this->base.lock);
     return result;
 }
