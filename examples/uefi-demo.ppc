@@ -101,11 +101,10 @@ int program(parr_t csArgs)
     EFI_SIMPLE_TEXT_OUTPUT *con = __uefi_st->ConOut;
     con->ClearScreen(con);
 
-    Display *disp = NEW(Display);
+    SCOPED_NEW(Display, disp);
     if (!display_init(disp))
     {
         print("no usable GOP framebuffer\n", SIOERR);
-        REMOVE(disp);
         return 1;
     }
 
@@ -142,7 +141,6 @@ int program(parr_t csArgs)
 
     for (size_t i = 0; i < scene.len; i++) REMOVE(scene.data[i]);
     parr_free(&scene);
-    REMOVE(disp);
 
     return 0;
 }
