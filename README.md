@@ -79,7 +79,7 @@ int program(parr_t csArgs)
 - Windows (x86_64, x86, aarch64)
   - CMake 3.25+ (Usually bundled with MSVC)
   - MSVC 2022+ or Clang (targeting MinGW or MSVC ABI)
-  - Windows 7+ win32 API
+  - Windows Vista+ win32 API
 
 Linux
 
