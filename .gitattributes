@@ -3,3 +3,4 @@
 **/*.ppc linguist-language=C
 **/*.inl linguist-language=C
 **/*.s linguist-language=Assembly
+**/Makefile.* linguist-language=Makefile
