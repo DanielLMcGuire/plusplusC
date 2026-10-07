@@ -1,11 +1,11 @@
-// ++C C Runtime Library (libminicrt) | Platform (Linux) - thread descriptor and TLS bootstrap
+// ++C C Runtime Library (libminicrt) | Platform (Linux/FreeBSD)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#ifndef LINUX_THREAD_H
-#define LINUX_THREAD_H
+#ifndef SYS_THREAD_H
+#define SYS_THREAD_H
 
-#include "sys_linux.h"
+#include "xxc_sys.h"
 #include <atomic.h>
 
 #define XXC_TLS_KEYS_MAX 64
@@ -34,6 +34,10 @@ struct xxc_thread {
     void              *retval;
     void              *map_base;
     size_t             map_size;
+#if defined(__FreeBSD__)
+    volatile long      ktid;
+    volatile long      exit_state;
+#endif
     void              *tls_values[XXC_TLS_KEYS_MAX];
     u32                tls_gens[XXC_TLS_KEYS_MAX];
 #if defined(__i386__)
@@ -52,10 +56,12 @@ size_t __xxc_tls_area_size(void);
 
 char *__xxc_tls_setup(char *region_end, void **tp_out);
 
+#if defined(__linux__)
 int  __xxc_clone(int (*fn)(void *), void *stack_top, int flags, void *arg,
                  int *ptid, void *tls, int *ctid);
+#endif
 void __xxc_unmapself(void *base, size_t size) XXC_NORETURN;
 
 void __linux_heap_thread_exit(void);
 
-#endif /* LINUX_THREAD_H */
+#endif /* SYS_THREAD_H */

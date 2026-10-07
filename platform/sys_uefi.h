@@ -6,7 +6,7 @@
 #define UEFI_SYS_H
 
 #include <def.h>
-#include "uefi.h"
+#include "xxc_uefi.h"
 
 extern EFI_SYSTEM_TABLE *__uefi_st;
 extern EFI_HANDLE        __uefi_image;

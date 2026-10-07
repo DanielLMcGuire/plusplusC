@@ -43,6 +43,11 @@
     #define SOCK_SO_REUSEADDR 0x0004
     #define SOCK_SO_KEEPALIVE 0x0008
     #define SOCK_SO_BROADCAST 0x0020
+#elif defined(__FreeBSD__)
+    #define SOCK_SOL_SOCKET   0xffff
+    #define SOCK_SO_REUSEADDR 0x0004
+    #define SOCK_SO_KEEPALIVE 0x0008
+    #define SOCK_SO_BROADCAST 0x0020
 #else
     #define SOCK_SOL_SOCKET   1
     #define SOCK_SO_REUSEADDR 2
@@ -59,7 +64,12 @@ typedef struct {
 } sock_in_addr_t;
 
 typedef struct {
+#if defined(__FreeBSD__)
+    u8             sin_len;
+    u8             sin_family;
+#else
     u16            sin_family;
+#endif
     u16            sin_port;
     sock_in_addr_t sin_addr;
     u8             sin_zero[8];

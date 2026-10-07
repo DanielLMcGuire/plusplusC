@@ -1,7 +1,7 @@
 #ifndef BGRT_H
 #define BGRT_H
 
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 #include "display.pph"
 #include "bmp.h"
 

@@ -1,4 +1,4 @@
-// ++C
+// ++C C Runtime Library (libminicrt)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
@@ -11,13 +11,13 @@
 #include <crt_lock.h>
 
 #ifdef __UEFI__
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 #elif defined(_WIN32)
 #include <windows.h>
 static HANDLE g_err = INVALID_HANDLE_VALUE;
 static HANDLE g_out = INVALID_HANDLE_VALUE;
-#elif defined(__linux__)
-#include "sys_linux.h"
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 #endif
 
 #define PRINTF_STACK_BUF_SIZE 1024
@@ -67,7 +67,7 @@ static int raw_print(const char *str, unsigned int stream)
         if (!WriteFile(handle, str, length, &written, NULL)) return -1;
     }
 
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     int fd = (stream == SIOOUT) ? 1 : 2;
 
     if (sys_write(fd, str, strlen(str)) < 0) return -1;
@@ -103,7 +103,7 @@ static int raw_putchar(int c, unsigned int stream)
             return -1;
     }
 
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     char ch = (char)c;
     int fd = (stream == SIOOUT) ? 1 : 2;
 

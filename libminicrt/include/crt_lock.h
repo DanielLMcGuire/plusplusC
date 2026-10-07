@@ -30,8 +30,8 @@ static inline void __crt_lock_release(crt_lock_t *lock)
     ReleaseSRWLockExclusive(lock);
 }
 
-#elif defined(__linux__)
-#include <sys_linux.h>
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 typedef struct {
     int state;
 } crt_lock_t;

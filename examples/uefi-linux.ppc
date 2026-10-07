@@ -6,7 +6,7 @@
 #include <parr.h>
 #include <dstr.h>
 #include <files.pph>
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 #include "uefi/display.pph"
 #include "uefi/bgrt.h"
 

@@ -20,8 +20,8 @@ static void mutex_reacquire_after_wait(mutex_t *mtx, u32 saved_count)
     mtx->count = saved_count;
 }
 
-#if defined(__linux__)
-#include <sys_linux.h>
+#if defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 
 int cond_init(cond_t *cv)
 {

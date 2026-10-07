@@ -2,7 +2,7 @@
 
 C with "classes"
 
-++C is a CRT and OOP framework for C. It provides "Classes" via macros, and other features expected from a common CRT. It is not C standard compliant. It requires no dependencies (other than win32 APIs or Linux syscalls)
+++C is a CRT and OOP framework for C. It provides "Classes" via macros, and other features expected from a common CRT. It is not C standard compliant. It requires no dependencies (other than win32 APIs or Linux/FreeBSD syscalls)
 
 ## Usage
 
@@ -68,11 +68,16 @@ int program(parr_t csArgs)
 
 ### Prerequisites
 
-- CMake 3.25+
 - Linux
+  - CMake 3.25+
   - GCC 13+ or Clang 16+
   - as / GNU Assembler / GCC / Clang
+- FreeBSD (x86_64, aarch64)
+  - CMake 3.25+, Ninja (`pkg install cmake ninja`)
+  - Clang + lld from the base system
+  - aarch64 also links `libcompiler_rt` (in base) for 128-bit `long double` helpers
 - Windows
+  - CMake 3.25+ (Usually bundled with MSVC)
   - MSVC 2022+ or Clang (targeting MinGW or MSVC ABI)
 
 ```bash
@@ -81,6 +86,15 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 ./build/main
+```
+
+FreeBSD
+
+```sh
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+./build/test
 ```
 
 Windows (MSVC)

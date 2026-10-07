@@ -5,7 +5,7 @@
 #include <clock.h>
 
 #if defined(__UEFI__)
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 
 extern u64 __uefi_monotonic_ns(void);
 u64 clock_monotonic_ns(void)
@@ -34,8 +34,8 @@ u64 clock_monotonic_ns(void)
     return secs * 1000000000ull + (rem * 1000000000ull) / (u64)f;
 }
 
-#elif defined(__linux__)
-#include "sys_linux.h"
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 
 u64 clock_monotonic_ns(void)
 {

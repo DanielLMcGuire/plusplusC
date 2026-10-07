@@ -6,12 +6,12 @@
 #include <def.h>
 #include <mem.h>
 #ifdef __UEFI__
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 #elif defined(_WIN32)
 #include <windows.h>
-#elif defined(__linux__)
-#include <sys_linux.h>
-#include <linux_alloc.h>
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
+#include <sys_alloc.h>
 #endif
 
 #ifdef __UEFI__
@@ -45,14 +45,14 @@ size_t malloc_usable_size(void *p)
 
 #ifdef _WIN32
 
-HANDLE heap = INVALID_HANDLE_VALUE;
+XXC_DYN_EXPORT HANDLE heap = INVALID_HANDLE_VALUE;
 
 void* malloc(size_t size)
 {
     if (size == 0) size = 1;
     return HeapAlloc(heap, 0, (SIZE_T)size);
 }
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
 void* malloc(size_t size)
 {
     return __linux_malloc(size);
@@ -67,7 +67,7 @@ void* calloc(size_t count, size_t size)
     if (count != 0 && total / count != size)
         return NULL;
     return HeapAlloc(heap, HEAP_ZERO_MEMORY, (SIZE_T)(total ? total : 1));
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     return __linux_calloc(count, size);
 #endif
 }
@@ -89,7 +89,7 @@ void* realloc(void *ptr, size_t size)
 
     return HeapReAlloc(heap, 0, ptr, (SIZE_T)size);
 }
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
 void* realloc(void *ptr, size_t size)
 {
     return __linux_realloc(ptr, size);
@@ -104,7 +104,7 @@ void free(void *ptr)
 
     HeapFree(heap, 0, ptr);
 }
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
 void free(void *ptr)
 {
     __linux_free(ptr);
@@ -116,7 +116,7 @@ size_t malloc_usable_size(void *ptr)
 {
     return ptr ? (size_t)HeapSize(heap, 0, ptr) : 0;
 }
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
 size_t malloc_usable_size(void *ptr)
 {
     return __linux_usable_size(ptr);

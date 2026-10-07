@@ -7,8 +7,8 @@
 #include <cio.h>
 #include <crt_lock.h>
 
-#if defined(__linux__)
-#include "sys_linux.h"
+#if defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 #endif
 
 #define SOCK_TLS_SLOTS 64
@@ -25,7 +25,7 @@ static long sock_current_tid(void)
 {
 #if defined(_WIN32)
     return (long)GetCurrentThreadId();
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     long tid = sys_gettid();
     return (tid != 0) ? tid : -1;
 #else
@@ -79,6 +79,9 @@ sock_addr_in_t sock_make_addr(u32 addr_host_order, u16 port_host_order)
 
     memset(&addr, 0, sizeof(addr));
 
+#if defined(__FreeBSD__)
+    addr.sin_len         = (u8)sizeof(addr);
+#endif
     addr.sin_family      = SOCK_AF_INET;
     addr.sin_port        = sock_htons(port_host_order);
     addr.sin_addr.s_addr = sock_htonl(addr_host_order);
@@ -396,7 +399,16 @@ i32 sock_close(sock_t s)
     return 0;
 }
 
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
+
+#if defined(__FreeBSD__)
+static inline sock_addr_in_t sock_bsd_fix(const sock_addr_in_t *a)
+{
+    sock_addr_in_t c = *a;
+    c.sin_len = (u8)sizeof(c);
+    return c;
+}
+#endif
 
 bool sock_init(void)
 {
@@ -422,6 +434,10 @@ sock_t sock_socket(int domain, int type, int protocol)
 
 i32 sock_bind(sock_t s, const sock_addr_in_t *addr)
 {
+#if defined(__FreeBSD__)
+    sock_addr_in_t fixed = sock_bsd_fix(addr);
+    addr = &fixed;
+#endif
     long r = sys_bind(s, addr, (unsigned int)sizeof(*addr));
 
     if (r < 0)
@@ -463,6 +479,10 @@ sock_t sock_accept(sock_t s, sock_addr_in_t *out_addr)
 
 i32 sock_connect(sock_t s, const sock_addr_in_t *addr)
 {
+#if defined(__FreeBSD__)
+    sock_addr_in_t fixed = sock_bsd_fix(addr);
+    addr = &fixed;
+#endif
     long r = sys_connect(s, addr, (unsigned int)sizeof(*addr));
 
     if (r < 0)
@@ -502,6 +522,10 @@ i64 sock_recv(sock_t s, void *buf, size_t len, i32 flags)
 
 i64 sock_sendto(sock_t s, const void *buf, size_t len, i32 flags, const sock_addr_in_t *addr)
 {
+#if defined(__FreeBSD__)
+    sock_addr_in_t fixed;
+    if (addr) { fixed = sock_bsd_fix(addr); addr = &fixed; }
+#endif
     long r = sys_sendto(s, buf, len, (int)flags, addr, (unsigned int)sizeof(*addr));
 
     if (r < 0)

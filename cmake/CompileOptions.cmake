@@ -17,7 +17,7 @@ function(xxc_freestanding_compile_options target visibility)
                 -mno-stack-arg-probe
             )
         endif()
-    elseif (LINUX)
+    elseif (LINUX OR XXC_FREEBSD)
         if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
             target_compile_options(${target} ${visibility}
                 -O3
@@ -42,6 +42,15 @@ function(xxc_freestanding_link_options target)
 
     if (WIN32)
         target_link_libraries(${target} PRIVATE kernel32 ws2_32)
+        if (MSVC OR CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+            target_link_options(${target} PRIVATE
+                "LINKER:/NODEFAULTLIB:msvcrt"
+                "LINKER:/NODEFAULTLIB:libcmt"
+                "LINKER:/NODEFAULTLIB:libcpmt"
+                "LINKER:/NODEFAULTLIB:ucrt"
+                "LINKER:/NODEFAULTLIB:libucrt"
+            )
+        endif()
 
         if (MSVC)
             target_link_options(${target} PRIVATE
@@ -82,7 +91,7 @@ function(xxc_freestanding_link_options target)
                 endif()
             endif()
         endif()
-    elseif (LINUX)
+    elseif (LINUX OR XXC_FREEBSD)
         if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
             target_link_options(${target} PRIVATE
                 -O3

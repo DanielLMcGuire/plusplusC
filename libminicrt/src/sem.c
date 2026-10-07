@@ -4,8 +4,8 @@
 
 #include <sem.h>
 
-#if defined(__linux__)
-#include <sys_linux.h>
+#if defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 
 int sem_init(sem_t *sem, u32 initial)
 {

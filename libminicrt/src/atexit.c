@@ -5,7 +5,7 @@
 #include <crt_lock.h>
 
 #ifdef __UEFI__
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 
 void _exit(int status)
 {
@@ -21,8 +21,8 @@ void _exit(int status)
     __NORETURN__
 }
 
-#elif defined(__linux__)
-#include "sys_linux.h"
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 
 void _exit(int status)
 {

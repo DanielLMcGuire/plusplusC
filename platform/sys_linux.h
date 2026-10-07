@@ -88,7 +88,7 @@ long sys_clock_gettime(int clock_id, xxc_timespec_t *out);
 long sys_set_tid_address(int *tidptr);
 void sys_exit_thread(int status);
 
-void __xxc_linux_init(int argc, char **argv);
+void __xxc_platform_init(int argc, char **argv);
 
 long sys_rt_sigaction(int signum, const void *act, void *oldact, size_t sigsetsize);
 long sys_getpid(void);

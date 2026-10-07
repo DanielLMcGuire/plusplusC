@@ -1,8 +1,8 @@
-// ++C C Runtime Library (libminicrt) | Platform (Linux)
+// ++C C Runtime Library (libminicrt) | Platform (Linux/FreeBSD)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#include "../linux_thread.h"
+#include "../sys_thread.h"
 #include <mem.h>
 
 #define AT_NULL   0
@@ -114,7 +114,10 @@ char *__xxc_tls_setup(char *region_end, void **tp_out)
 
 static void set_thread_pointer(void *tp)
 {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__FreeBSD__)
+    unsigned long base = (unsigned long)tp;
+    (void)syscall(XXC_SYS_sysarch, 129L /* AMD64_SET_FSBASE */, (long)&base);
+#elif defined(__x86_64__)
     (void)syscall(__NR_arch_prctl, 0x1002L, (long)tp);
 #elif defined(__i386__)
     xxc_user_desc_t d;
@@ -150,7 +153,7 @@ static int has_interp(int argc, char **argv)
     return 0;
 }
 
-void __xxc_linux_init(int argc, char **argv)
+void __xxc_platform_init(int argc, char **argv)
 {
     if (has_interp(argc, argv))
     {

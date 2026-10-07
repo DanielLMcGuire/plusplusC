@@ -1,4 +1,8 @@
-#include "uefi_sys.h"
+// ++C C Runtime Library (libminicrt) | Platform (UEFI)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include "../sys_uefi.h"
 #include <mem.h>
 
 typedef struct { void *raw; size_t size; } hdr_t;

@@ -55,14 +55,16 @@ int tls_key_delete(tls_key_t key)
     return rc;
 }
 
-#if defined(__linux__)
+#if defined(XXC_RAWSYS)
 
-#include "linux_thread.h"
+#include "sys_thread.h"
 
 #define XXC_THREAD_GUARD  ((size_t)65536)
 #define XXC_THREAD_MINSTK ((size_t)16384)
 
+#if defined(__linux__)
 static int g_dead_tid;
+#endif
 
 static inline size_t align_up_sz(size_t v, size_t a)
 { 
@@ -111,6 +113,8 @@ static void run_tls_destructors(struct xxc_thread *t)
         if (!ran) break;
     }
 }
+
+#if defined(__linux__)
 
 static XXC_NORETURN void thread_finish(struct xxc_thread *t, void *retval)
 {
@@ -199,6 +203,101 @@ static void thread_reap(struct xxc_thread *t, void **retval)
     size_t size = t->map_size;
     if (base) sys_munmap(base, size);
 }
+
+#elif defined(__FreeBSD__)
+
+static XXC_NORETURN void thread_finish(struct xxc_thread *t, void *retval)
+{
+    t->retval = retval;
+    run_tls_destructors(t);
+    __linux_heap_thread_exit();
+
+    i32 expect = XXC_THREAD_JOINABLE;
+    if (atomic_i32_cas(&t->state, &expect, XXC_THREAD_EXITED))
+        sys_thr_exit((long *)&t->exit_state);
+
+    (void)sys_sigprocmask_block_all();
+    __xxc_unmapself(t->map_base, t->map_size);
+}
+
+static XXC_NORETURN void thread_entry(void *p)
+{
+    struct xxc_thread *t = (struct xxc_thread *)p;
+    __xxc_self = t;
+    atomic_i32_store(&t->tid, (i32)t->ktid);
+    thread_finish(t, t->start(t->arg));
+}
+
+int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t *attr)
+{
+    if (!out || !fn)
+        return THREAD_INVAL;
+
+    size_t stack = (attr && attr->stack_size) ? attr->stack_size : THREAD_DEFAULT_STACK_SIZE;
+    if (stack < XXC_THREAD_MINSTK) stack = XXC_THREAD_MINSTK;
+    bool detached = attr && attr->detached;
+
+    size_t tls_area = align_up_sz(__xxc_tls_area_size(), 64);
+    size_t desc_sz  = align_up_sz(sizeof(struct xxc_thread), 64);
+    size_t total    = align_up_sz(XXC_THREAD_GUARD + stack + tls_area + desc_sz, 65536);
+
+    char *base = (char *)sys_mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (!base)
+        return THREAD_NOMEM;
+    (void)sys_mprotect(base, XXC_THREAD_GUARD, PROT_NONE);
+
+    struct xxc_thread *t = (struct xxc_thread *)(base + total - desc_sz);
+    t->self     = t;
+    t->start    = fn;
+    t->arg      = arg;
+    t->map_base = base;
+    t->map_size = total;
+    t->ktid       = 0;
+    t->exit_state = 0;
+    atomic_i32_init(&t->state, detached ? XXC_THREAD_DETACHED : XXC_THREAD_JOINABLE);
+
+    void *tp;
+    char *lowest = __xxc_tls_setup((char *)t, &tp);
+    char *sp = (char *)((uintptr_t)lowest & ~(uintptr_t)15);
+
+    xxc_thr_param_t pr = {0};
+    pr.start_func = thread_entry;
+    pr.arg        = t;
+    pr.stack_base = base + XXC_THREAD_GUARD;
+    pr.stack_size = (size_t)(sp - pr.stack_base);
+    pr.tls_base   = (char *)tp;
+    pr.child_tid  = (long *)&t->ktid;
+    pr.parent_tid = (long *)&t->ktid;
+
+    *out = detached ? NULL : t;
+    long r = sys_thr_new(&pr);
+    if (r < 0)
+    {
+        *out = NULL;
+        sys_munmap(base, total);
+        return (r == -XXC_ENOMEM || r == -XXC_EAGAIN) ? THREAD_NOMEM : THREAD_ERROR;
+    }
+
+    if (!detached)
+        atomic_i32_store(&t->tid, (i32)t->ktid);
+    return THREAD_SUCCESS;
+}
+
+static void thread_reap(struct xxc_thread *t, void **retval)
+{
+    for (;;)
+    {
+        i32 st = (i32)__atomic_load_n((volatile i32 *)&t->exit_state, __ATOMIC_ACQUIRE);
+        if (st == 1) break;
+        sys_futex((int *)&t->exit_state, 0, st, NULL, NULL, 0);
+    }
+    if (retval) *retval = t->retval;
+    void *base = t->map_base;
+    size_t size = t->map_size;
+    if (base) sys_munmap(base, size);
+}
+
+#endif /* __linux__ / __FreeBSD__ */
 
 int thread_join(thread_t t, void **retval)
 {

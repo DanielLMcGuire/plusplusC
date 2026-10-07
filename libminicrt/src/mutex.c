@@ -23,8 +23,8 @@ static inline long mutex_current_tid(void)
 {
     return (long)GetCurrentThreadId();
 }
-#elif defined(__linux__)
-#include "sys_linux.h"
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 static inline long mutex_current_tid(void)
 {
     long tid = sys_gettid();

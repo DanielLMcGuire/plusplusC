@@ -7,6 +7,10 @@
 
 #define __NORETURN__ while (1) (void)0;
 
+#if defined(__linux__) || defined(__FreeBSD__)
+    #define XXC_RAWSYS 1
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
     #define XXC_LIKELY(x)   __builtin_expect(!!(x), 1)
     #define XXC_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -28,6 +32,22 @@
     #define XXC_NORETURN
     #define XXC_UNUSED
     #define XXC_USED
+#endif
+
+#if defined(_WIN32)
+    #if defined(XXC_BUILDING_SHARED_LIB)
+        #define XXC_DYN_EXPORT __declspec(dllexport)
+        #define XXC_DYN_IMPORT
+    #elif defined(XXC_USING_SHARED_LIB)
+        #define XXC_DYN_EXPORT
+        #define XXC_DYN_IMPORT __declspec(dllimport)
+    #else
+        #define XXC_DYN_EXPORT
+        #define XXC_DYN_IMPORT
+    #endif
+#else
+    #define XXC_DYN_EXPORT
+    #define XXC_DYN_IMPORT
 #endif
 
 #define XXC_CACHELINE 64

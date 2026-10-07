@@ -6,6 +6,7 @@
 #include <windows.h>
 #undef va_start
 
+#include <def.h>
 #include "commandline.h"
 
 extern void exit(int status);
@@ -14,10 +15,12 @@ extern int atexit(atexit_func_t func);
 
 extern void pluspluscBoot(int argc, char **argv);
 
-extern HANDLE heap;
+extern XXC_DYN_IMPORT HANDLE heap;
 
 int argc = 0;
 char **argv = NULL;
+
+volatile int _fltused = 0;
 
 void freeArgs(void)
 {

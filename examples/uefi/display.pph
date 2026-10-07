@@ -2,7 +2,7 @@
 #define UEFI_DISPLAY_H
 
 #include <class.pph>
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 
 CLASS(Display)
 {

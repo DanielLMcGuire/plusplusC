@@ -28,6 +28,7 @@ struct Class {
 
     C_Constructor constructor;
     C_Destructor destructor;
+    void (*init)(void);
 };
 
 
@@ -42,12 +43,22 @@ static inline const C_Header *c_header_const(const void *object)
     return ((const C_Header *)object) - 1;
 }
 
+static inline void c_init_class(const Class *class)
+{
+    if (!class || !class->init)
+        return;
+
+    class->init();
+}
+
 static inline const Class *c_class(const void *object)
 {
     if (!object)
         return NULL;
 
-    return c_header_const(object)->class;
+    const Class *class = c_header_const(object)->class;
+    c_init_class(class);
+    return class;
 }
 
 static inline void *c_new(const Class *class)
@@ -119,6 +130,8 @@ static inline int c_is_a(
 
     while (current)
     {
+        c_init_class(current);
+
         if (current == class)
             return 1;
 
@@ -176,24 +189,46 @@ static inline int c_is_a(
 #define SUPER_DTOR(self, parent) \
     parent##__dctor(&(self)->base)
 
+#if defined(__clang__) && defined(_WIN32)
+#define XXC_CLASS_WARNINGS_PUSH() \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Winconsistent-dllimport\"") \
+    _Pragma("clang diagnostic ignored \"-Wdll-attribute-on-redeclaration\"")
+#define XXC_CLASS_WARNINGS_POP() \
+    _Pragma("clang diagnostic pop")
+#else
+#define XXC_CLASS_WARNINGS_PUSH()
+#define XXC_CLASS_WARNINGS_POP()
+#endif
+
 #define CLASS_INFO_ROOT(Type) \
-    const Class Type##__Class = { \
+    XXC_DYN_EXPORT Class Type##__Class = { \
         .name = #Type, \
         .parent = NULL, \
         .size = sizeof(Type), \
         .constructor = (C_Constructor)Type##__ctor, \
-        .destructor = (C_Destructor)Type##__dctor \
+        .destructor = (C_Destructor)Type##__dctor, \
+        .init = NULL \
     }
 
 
 #define CLASS_INFO(Type, parent_type) \
-    const Class Type##__Class = { \
+    XXC_CLASS_WARNINGS_PUSH() \
+    XXC_CLASS_DECL(parent_type) \
+    extern XXC_DYN_EXPORT Class Type##__Class; \
+    static void Type##__Class_init(void) { \
+        if (!Type##__Class.parent) \
+            Type##__Class.parent = &parent_type##__Class; \
+    } \
+    XXC_DYN_EXPORT Class Type##__Class = { \
         .name = #Type, \
-        .parent = &parent_type##__Class, \
+        .parent = NULL, \
         .size = sizeof(Type), \
         .constructor = (C_Constructor)Type##__ctor, \
-        .destructor = (C_Destructor)Type##__dctor \
-    }
+        .destructor = (C_Destructor)Type##__dctor, \
+        .init = Type##__Class_init \
+    }; \
+    XXC_CLASS_WARNINGS_POP()
 
 #define NEW(Type) \
     ((Type *)c_new(&Type##__Class))
@@ -260,10 +295,24 @@ static inline int c_is_a(
 #define METHOD_LINK(...) \
     SELECT_METHOD_LINK(__VA_ARGS__, METHOD_LINK_3, METHOD_LINK_2)(__VA_ARGS__)
 
+#if defined(_WIN32)
+    #if defined(XXC_BUILDING_SHARED_LIB)
+        #define XXC_CLASS_DECL(Type) extern XXC_DYN_EXPORT Class Type##__Class;
+    #elif defined(XXC_USING_SHARED_LIB)
+        #define XXC_CLASS_DECL(Type) extern XXC_DYN_IMPORT Class Type##__Class;
+    #else
+        #define XXC_CLASS_DECL(Type) extern Class Type##__Class;
+    #endif
+#else
+    #define XXC_CLASS_DECL(Type) extern Class Type##__Class;
+#endif
+
 #define CLASS_EXPORT(Type) \
-    extern const Class Type##__Class; \
+    XXC_CLASS_WARNINGS_PUSH() \
+    XXC_CLASS_DECL(Type) \
     CONSTRUCTOR(Type); \
-    DECONSTRUCTOR(Type);
+    DECONSTRUCTOR(Type); \
+    XXC_CLASS_WARNINGS_POP()
 
 #define METHOD_DECL(Type, method) \
     __CMETHOD_FMT(Type, method)

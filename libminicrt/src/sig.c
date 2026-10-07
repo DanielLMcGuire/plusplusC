@@ -4,8 +4,10 @@
 
 #include <sig.h>
 
+#if defined(XXC_RAWSYS)
+#include <xxc_sys.h>
+
 #if defined(__linux__)
-#include "sys_linux.h"
 
 #if defined(__x86_64__)
 extern void __restore_rt(void);
@@ -22,6 +24,7 @@ typedef struct {
 } k_sigaction_t;
 
 #endif /* __linux__ */
+#endif /* XXC_RAWSYS */
 
 void sigemptyset(sigset_t *set)
 {
@@ -40,7 +43,59 @@ int sigismember(const sigset_t *set, int signum)
     return (int)((set->bits >> (u64)(signum - 1)) & 1);
 }
 
-#if defined(__linux__)
+#if defined(__FreeBSD__)
+
+int sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
+{
+    xxc_ksigaction_t kact = {0};
+    xxc_ksigaction_t kold = {0};
+
+    if (signum < 1 || signum >= NSIG || signum == SIGKILL || signum == SIGSTOP)
+        return -1;
+
+    if (act)
+    {
+        kact.handler = act->sa_handler;
+        kact.flags   = (int)act->sa_flags;
+        kact.mask.bits[0] = (u32)(act->sa_mask.bits & 0xffffffffu);
+        kact.mask.bits[1] = (u32)(act->sa_mask.bits >> 32);
+    }
+
+    long ret = sys_sigaction(signum, act ? &kact : (void *)0, oldact ? &kold : (void *)0);
+    if (ret < 0) return -1;
+
+    if (oldact)
+    {
+        oldact->sa_handler  = kold.handler;
+        oldact->sa_flags    = (unsigned long)(unsigned int)kold.flags;
+        oldact->sa_restorer = (void (*)(void))0;
+        oldact->sa_mask.bits = (u64)kold.mask.bits[0] | ((u64)kold.mask.bits[1] << 32);
+    }
+    return 0;
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    sigaction_t act = {0};
+    sigaction_t old = {0};
+
+    act.sa_handler = handler;
+    act.sa_flags   = SA_RESTART;
+    sigemptyset(&act.sa_mask);
+
+    if (sigaction(signum, &act, &old) < 0)
+        return SIG_ERR;
+    return old.sa_handler;
+}
+
+int raise(int sig)
+{
+    long pid = sys_getpid();
+    if (pid < 0) return -1;
+    return (sys_kill(pid, sig) < 0) ? -1 : 0;
+}
+
+#elif defined(__linux__)
 
 int sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
 {

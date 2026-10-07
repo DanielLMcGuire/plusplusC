@@ -21,7 +21,7 @@ enum {
 #if defined(_WIN32)
     #include <windows.h>
     typedef struct { HANDLE handle; } sem_t;
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     #include <atomic.h>
     typedef struct { atomic_i32_t count; } sem_t;
 #endif

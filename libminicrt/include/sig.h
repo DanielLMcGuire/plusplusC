@@ -3,6 +3,31 @@
 
 #include <def.h>
 
+#if defined(__FreeBSD__)
+#define SIGHUP    1
+#define SIGINT    2
+#define SIGQUIT   3
+#define SIGILL    4
+#define SIGTRAP   5
+#define SIGABRT   6
+#define SIGFPE    8
+#define SIGKILL   9
+#define SIGBUS    10
+#define SIGSEGV   11
+#define SIGSYS    12
+#define SIGPIPE   13
+#define SIGALRM   14
+#define SIGTERM   15
+#define SIGURG    16
+#define SIGSTOP   17
+#define SIGTSTP   18
+#define SIGCONT   19
+#define SIGCHLD   20
+#define SIGTTIN   21
+#define SIGTTOU   22
+#define SIGUSR1   30
+#define SIGUSR2   31
+#else
 #define SIGHUP    1
 #define SIGINT    2
 #define SIGQUIT   3
@@ -24,6 +49,7 @@
 #define SIGTSTP   20
 #define SIGTTIN   21
 #define SIGTTOU   22
+#endif
 
 #define NSIG      64
 
@@ -33,12 +59,21 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN ((sighandler_t)1)
 #define SIG_ERR ((sighandler_t)-1)
 
+#if defined(__FreeBSD__)
+#define SA_NOCLDSTOP 0x00000008
+#define SA_NOCLDWAIT 0x00000020
+#define SA_SIGINFO   0x00000040
+#define SA_RESTART   0x00000002
+#define SA_NODEFER   0x00000010
+#define SA_RESETHAND 0x00000004
+#else
 #define SA_NOCLDSTOP 0x00000001
 #define SA_NOCLDWAIT 0x00000002
 #define SA_SIGINFO   0x00000004
 #define SA_RESTART   0x10000000
 #define SA_NODEFER   0x40000000
 #define SA_RESETHAND 0x80000000
+#endif
 
 typedef struct {
     u64 bits;

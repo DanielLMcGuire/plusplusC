@@ -8,7 +8,7 @@
 #include <cio.h>
 #include <str.h>
 #include <mem.h>
-#include <uefi_sys.h>
+#include <sys_uefi.h>
 
 static int g_pass, g_fail;
 

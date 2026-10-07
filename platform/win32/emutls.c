@@ -1,4 +1,4 @@
-// ++C C Runtime Library (libminicrt)
+// ++C C Runtime Library (libminicrt) | Platform (win32)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 

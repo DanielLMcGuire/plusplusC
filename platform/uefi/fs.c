@@ -1,8 +1,8 @@
-// ++C C Runtime Library (libminicrt) | Platform (UEFI) - files
+// ++C C Runtime Library (libminicrt) | Platform (UEFI)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#include "uefi_sys.h"
+#include "../sys_uefi.h"
 #include <mem.h>
 
 static EFI_FILE_PROTOCOL *g_root;

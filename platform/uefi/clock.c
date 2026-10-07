@@ -1,8 +1,8 @@
-// ++C C Runtime Library (libminicrt) | Platform (UEFI) - time
+// ++C C Runtime Library (libminicrt) | Platform (UEFI)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#include "uefi_sys.h"
+#include "../sys_uefi.h"
 
 static u64 g_tsc_hz;
 static u64 g_tsc_base;

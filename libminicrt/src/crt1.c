@@ -1,4 +1,4 @@
-// ++C
+// ++C C Runtime Library (libminicrt)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
@@ -31,12 +31,12 @@ void pluspluscBoot(int argc, char **argv)
     __NORETURN__
 }
 
-#elif defined(__linux__)
-#include "sys_linux.h"
+#elif defined(XXC_RAWSYS)
+#include <xxc_sys.h>
 
 void pluspluscBoot(int argc, char **argv)
 {
-    __xxc_linux_init(argc, argv);
+    __xxc_platform_init(argc, argv);
     sio_init(0, 0);
     xxc_io_init();
     parr_t args = parr_new((const void**)argv, (size_t)argc);

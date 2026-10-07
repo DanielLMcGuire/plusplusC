@@ -2,7 +2,7 @@
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#include "../linux_alloc.h"
+#include "../sys_alloc.h"
 #include <atomic.h>
 #include <crt_lock.h>
 #include <mem.h>

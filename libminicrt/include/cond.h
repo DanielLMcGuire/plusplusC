@@ -22,7 +22,7 @@ enum {
     #include <windows.h>
     typedef struct { CONDITION_VARIABLE cv; } cond_t;
     #define COND_INIT { CONDITION_VARIABLE_INIT }
-#elif defined(__linux__)
+#elif defined(XXC_RAWSYS)
     #include <atomic.h>
     typedef struct { atomic_u32_t seq; } cond_t;
     #define COND_INIT { ATOMIC_INIT(0) }

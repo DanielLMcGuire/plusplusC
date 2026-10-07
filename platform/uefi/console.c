@@ -1,9 +1,9 @@
 
-// ++C C Runtime Library (libminicrt) | Platform (UEFI) - console I/O
+// ++C C Runtime Library (libminicrt) | Platform (UEFI)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
-#include "uefi_sys.h"
+#include "../sys_uefi.h"
 
 void __uefi_write(const char *s, size_t n, unsigned int stream)
 {
