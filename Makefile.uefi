@@ -2,7 +2,7 @@ CC = clang
 CFLAGS = --target=x86_64-unknown-windows -std=gnu2x -O2 \
           -ffreestanding -fno-builtin -fno-stack-protector -mno-stack-arg-probe -mno-red-zone \
           -U_WIN32 -U_WIN64 -D__UEFI__ -D_CORECRT_BUILD \
-          -Ilibminicrt/include -Ilibminicrt/internal -Ilibxxc/include -Iplatform/uefi \
+          -Ilibminicrt/include -Ilibminicrt/internal -Ilibxxc/include -Iplatform -Iplatform/uefi \
           -Wall -Wno-unused-function
 OVMF ?= /usr/share/OVMF
 
@@ -19,7 +19,7 @@ KBASE ?= initrd=\\initrd.img quiet splash vt.global_cursor_default=0 fbcon=nodef
 KFLAGS ?=
 BOOT_INI = out/boot.ini
 
-CRT_SRCS = str mem dstr iarr parr map alloc atexit format sio clock
+CRT_SRCS = str mem dstr iarr parr map alloc atexit format cio clock
 
 XXC_SRCS = stream FileStream FSPath MemoryStream Map argparse app
 PLAT_SRCS = crt0 alloc console fs clock

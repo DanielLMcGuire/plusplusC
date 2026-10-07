@@ -13,8 +13,18 @@ if (NOT TARGET xxc)
     )
     set_source_files_properties(${XXC_SOURCES} PROPERTIES LANGUAGE C)
 
-    add_library(xxc STATIC
-        ${XXC_SOURCES}
+    add_library(xxc_objects OBJECT ${XXC_SOURCES})
+    target_include_directories(xxc_objects PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libminicrt/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/platform>
+    )
+    if (WIN32)
+        target_compile_definitions(xxc_objects PUBLIC WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
+    endif()
+    xxc_freestanding_compile_options(xxc_objects PUBLIC)
+
+    add_library(xxc STATIC $<TARGET_OBJECTS:xxc_objects>
         ${CMAKE_CURRENT_SOURCE_DIR}/include/class.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/app.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/argparse.pph
@@ -29,21 +39,19 @@ if (NOT TARGET xxc)
     add_library(xxc::xxc ALIAS xxc)
 
     set(XXC_TARGETS xxc)
-    if (XXC_DEMO_USES_SHARED OR XXC_TESTS_USES_SHARED)
-        add_library(xxc_shared SHARED ${XXC_SOURCES})
-        set_target_properties(xxc_shared PROPERTIES
-            RUNTIME_OUTPUT_NAME xxc
-            LIBRARY_OUTPUT_NAME xxc_shared
-            ARCHIVE_OUTPUT_NAME xxc_shared
-            WINDOWS_EXPORT_ALL_SYMBOLS ON
-            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-        )
-        target_compile_definitions(xxc_shared PRIVATE XXC_BUILDING_SHARED_LIB)
-        add_library(xxc::xxc_shared ALIAS xxc_shared)
-        list(APPEND XXC_TARGETS xxc_shared)
-    endif()
+    add_library(xxc_shared SHARED $<TARGET_OBJECTS:xxc_objects>)
+    set_target_properties(xxc_shared PROPERTIES
+        RUNTIME_OUTPUT_NAME xxc
+        LIBRARY_OUTPUT_NAME xxc
+        ARCHIVE_OUTPUT_NAME xxc_shared
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+    target_compile_definitions(xxc_shared PRIVATE XXC_BUILDING_SHARED_LIB)
+    add_library(xxc::xxc_shared ALIAS xxc_shared)
+    list(APPEND XXC_TARGETS xxc_shared)
 
     target_link_libraries(xxc PUBLIC xxc::minicrt)
     if (TARGET xxc_shared)
@@ -56,6 +64,9 @@ if (NOT TARGET xxc)
 
     foreach(tgt IN LISTS XXC_TARGETS)
         target_include_directories(${tgt} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+        if (WIN32)
+            target_compile_definitions(${tgt} PUBLIC WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
+        endif()
         xxc_freestanding_compile_options(${tgt} PUBLIC)
     endforeach()
     

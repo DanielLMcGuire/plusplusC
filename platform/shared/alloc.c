@@ -1,4 +1,4 @@
-// ++C C Runtime Library (libminicrt) | Platform (Linux)
+// ++C C Runtime Library (libminicrt) | Platform (Linux/FreeBSD)
 // Copyright 2026 Daniel McGuire
 // Licensed under the MIT License
 
@@ -261,7 +261,7 @@ static XXC_NOINLINE xxc_heap *heap_acquire(void)
     return h;
 }
 
-void __linux_heap_thread_exit(void)
+void __xxc_heap_thread_exit(void)
 {
     xxc_heap *h = t_heap;
     if (!h) return;
@@ -450,12 +450,12 @@ static inline void *alloc_impl(size_t size, bool *zeroed)
     return large_alloc(size, zeroed);
 }
 
-void *__linux_malloc(size_t size)
+void *__xxc_malloc(size_t size)
 {
     return alloc_impl(size, NULL);
 }
 
-void *__linux_calloc(size_t count, size_t size)
+void *__xxc_calloc(size_t count, size_t size)
 {
     size_t total = count * size;
     if (count != 0 && total / count != size)
@@ -467,7 +467,7 @@ void *__linux_calloc(size_t count, size_t size)
     return p;
 }
 
-void __linux_free(void *ptr)
+void __xxc_free(void *ptr)
 {
     if (!ptr) return;
     xxc_page *pg = page_of(ptr);
@@ -488,7 +488,7 @@ void __linux_free(void *ptr)
     fatal("free(): invalid pointer\n");
 }
 
-size_t __linux_usable_size(void *ptr)
+size_t __xxc_usable_size(void *ptr)
 {
     if (!ptr) return 0;
     xxc_page *pg = page_of(ptr);
@@ -497,22 +497,22 @@ size_t __linux_usable_size(void *ptr)
     fatal("malloc_usable_size(): invalid pointer\n");
 }
 
-void *__linux_realloc(void *ptr, size_t size)
+void *__xxc_realloc(void *ptr, size_t size)
 {
-    if (!ptr) return __linux_malloc(size);
+    if (!ptr) return __xxc_malloc(size);
     if (size == 0)
     {
-        __linux_free(ptr);
+        __xxc_free(ptr);
         return NULL;
     }
 
-    size_t usable = __linux_usable_size(ptr);
+    size_t usable = __xxc_usable_size(ptr);
     if (size <= usable && size >= usable / 2)
         return ptr;
 
-    void *n = __linux_malloc(size);
+    void *n = __xxc_malloc(size);
     if (!n) return NULL;
     memcpy(n, ptr, usable < size ? usable : size);
-    __linux_free(ptr);
+    __xxc_free(ptr);
     return n;
 }

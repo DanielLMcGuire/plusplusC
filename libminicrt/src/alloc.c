@@ -55,7 +55,7 @@ void* malloc(size_t size)
 #elif defined(XXC_RAWSYS)
 void* malloc(size_t size)
 {
-    return __linux_malloc(size);
+    return __xxc_malloc(size);
 }
 #endif
 
@@ -68,7 +68,7 @@ void* calloc(size_t count, size_t size)
         return NULL;
     return HeapAlloc(heap, HEAP_ZERO_MEMORY, (SIZE_T)(total ? total : 1));
 #elif defined(XXC_RAWSYS)
-    return __linux_calloc(count, size);
+    return __xxc_calloc(count, size);
 #endif
 }
 
@@ -92,7 +92,7 @@ void* realloc(void *ptr, size_t size)
 #elif defined(XXC_RAWSYS)
 void* realloc(void *ptr, size_t size)
 {
-    return __linux_realloc(ptr, size);
+    return __xxc_realloc(ptr, size);
 }
 #endif
 
@@ -107,7 +107,7 @@ void free(void *ptr)
 #elif defined(XXC_RAWSYS)
 void free(void *ptr)
 {
-    __linux_free(ptr);
+    __xxc_free(ptr);
 }
 #endif
 
@@ -119,7 +119,7 @@ size_t malloc_usable_size(void *ptr)
 #elif defined(XXC_RAWSYS)
 size_t malloc_usable_size(void *ptr)
 {
-    return __linux_usable_size(ptr);
+    return __xxc_usable_size(ptr);
 }
 #endif
 

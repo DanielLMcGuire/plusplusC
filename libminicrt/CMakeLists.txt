@@ -96,25 +96,38 @@ if (NOT TARGET minicrt)
         ${MINICRT_CORE_SOURCES}
     )
 
-    add_library(minicrt STATIC ${MINICRT_SOURCES})
+    add_library(minicrt_objects OBJECT ${MINICRT_CORE_SOURCES})
+    target_include_directories(minicrt_objects PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/platform>
+    )
+    target_compile_definitions(minicrt_objects PUBLIC _CORECRT_BUILD)
+    if (WIN32)
+        target_compile_definitions(minicrt_objects PUBLIC WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
+    endif()
+    xxc_freestanding_compile_options(minicrt_objects PUBLIC)
+
+    add_library(minicrt STATIC
+        $<TARGET_OBJECTS:minicrt_objects>
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/crt1.c
+    )
     add_library(xxc::minicrt ALIAS minicrt)
 
     set(MINICRT_TARGETS minicrt)
-    if (XXC_DEMO_USES_SHARED OR XXC_TESTS_USES_SHARED)
-        add_library(minicrt_shared SHARED ${MINICRT_CORE_SOURCES})
-        set_target_properties(minicrt_shared PROPERTIES
-            RUNTIME_OUTPUT_NAME minicrt
-            LIBRARY_OUTPUT_NAME minicrt_shared
-            ARCHIVE_OUTPUT_NAME minicrt_shared
-            WINDOWS_EXPORT_ALL_SYMBOLS ON
-            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-        )
-        target_compile_definitions(minicrt_shared PRIVATE XXC_BUILDING_SHARED_LIB)
-        add_library(xxc::minicrt_shared ALIAS minicrt_shared)
-        list(APPEND MINICRT_TARGETS minicrt_shared)
-    endif()
+    add_library(minicrt_shared SHARED $<TARGET_OBJECTS:minicrt_objects>)
+    set_target_properties(minicrt_shared PROPERTIES
+        RUNTIME_OUTPUT_NAME minicrt
+        LIBRARY_OUTPUT_NAME minicrt
+        ARCHIVE_OUTPUT_NAME minicrt_shared
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+    target_compile_definitions(minicrt_shared PRIVATE XXC_BUILDING_SHARED_LIB)
+    add_library(xxc::minicrt_shared ALIAS minicrt_shared)
+    list(APPEND MINICRT_TARGETS minicrt_shared)
 
     if (LINUX)
         target_link_libraries(minicrt PUBLIC sys_linux)
@@ -156,7 +169,7 @@ if (NOT TARGET minicrt)
         )
         target_compile_definitions(${tgt} PUBLIC _CORECRT_BUILD)
         if (WIN32)
-            target_compile_definitions(${tgt} PUBLIC WIN32_LEAN_AND_MEAN)
+            target_compile_definitions(${tgt} PUBLIC WIN32_LEAN_AND_MEAN _WINSOCKAPI_)
         endif()
         xxc_freestanding_compile_options(${tgt} PUBLIC)
     endforeach()

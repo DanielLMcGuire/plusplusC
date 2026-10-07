@@ -120,7 +120,7 @@ static XXC_NORETURN void thread_finish(struct xxc_thread *t, void *retval)
 {
     t->retval = retval;
     run_tls_destructors(t);
-    __linux_heap_thread_exit();
+    __xxc_heap_thread_exit();
 
     i32 expect = XXC_THREAD_JOINABLE;
     if (atomic_i32_cas(&t->state, &expect, XXC_THREAD_EXITED))
@@ -210,7 +210,7 @@ static XXC_NORETURN void thread_finish(struct xxc_thread *t, void *retval)
 {
     t->retval = retval;
     run_tls_destructors(t);
-    __linux_heap_thread_exit();
+    __xxc_heap_thread_exit();
 
     i32 expect = XXC_THREAD_JOINABLE;
     if (atomic_i32_cas(&t->state, &expect, XXC_THREAD_EXITED))

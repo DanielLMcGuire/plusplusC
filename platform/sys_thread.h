@@ -62,6 +62,6 @@ int  __xxc_clone(int (*fn)(void *), void *stack_top, int flags, void *arg,
 #endif
 void __xxc_unmapself(void *base, size_t size) XXC_NORETURN;
 
-void __linux_heap_thread_exit(void);
+void __xxc_heap_thread_exit(void);
 
 #endif /* SYS_THREAD_H */
