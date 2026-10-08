@@ -10,7 +10,7 @@
 dstr_t dstr_new(const char *init)
 {
     dstr_t s = {0, 0, 0};
-    size_t len = strlen(init);
+    size_t len = init ? strlen(init) : 0;
     size_t cap = len < 15 ? 15 : len * 2; 
     s.data = (char*)malloc(cap + 1);
     if (s.data)

@@ -71,7 +71,7 @@ void parr_append_cstr(parr_t *arr, const char *str)
 {
     if (!arr) return;
 
-    size_t len = strlen(str);
+    size_t len = str ? strlen(str) : 0;
     char *copy = (char*)malloc(len + 1);
     if (!copy) return;
 

@@ -16,11 +16,18 @@
 #include <sys_uefi.h>
 #endif
 
+#if defined(__linux__) || defined(__FreeBSD__)
+#define FSPATH_ABSOLUTE 1
+#else
+#define FSPATH_ABSOLUTE 0
+#endif
+
 CLASS_INFO_ROOT(FSPath);
 
 CONSTRUCTOR(FSPath)
 {
     self->dsData = parr_new(NULL, 0);
+    self->absolute = false;
     METHOD_LINK(FSPath, join);
     METHOD_LINK(FSPath, parent);
     METHOD_LINK(FSPath, base);
@@ -58,6 +65,7 @@ static dstr_t fs_path_to_str(FSPath *self)
         }
     }
 #else
+    if (FSPATH_ABSOLUTE && self->absolute) dstr_append(&result, "/");
     for (size_t i = 0; i < self->dsData.len; i++) 
     {
         dstr_append(&result, ((dstr_t*)self->dsData.data[i])->data);
@@ -70,7 +78,10 @@ static dstr_t fs_path_to_str(FSPath *self)
 static void fs_path_split(FSPath *self, const char *path) 
 {
     if (!path) return;
-    
+
+    if (FSPATH_ABSOLUTE && self->dsData.len == 0 && (path[0] == '/' || path[0] == '\\'))
+        self->absolute = true;
+
     const char *curr = path;
     while (*curr) 
     {
@@ -114,6 +125,7 @@ IMPLEMENT(FSPath, FSPath *, parent, (void *self))
 {
     FSPath *this = (FSPath *)self;
     FSPath *p = NEW(FSPath);
+    p->absolute = this->absolute;
     if (this->dsData.len > 0) 
     {
         for (size_t i = 0; i < this->dsData.len - 1; i++) 

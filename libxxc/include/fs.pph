@@ -13,6 +13,7 @@
 CLASS(FSPath)
 {
     FIELD(parr_t, dsData)
+    FIELD(bool, absolute)
 
     METHOD(void,     join,     (void *self, const char *path))
     METHOD(FSPath *, parent,   (void *self))

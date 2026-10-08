@@ -62,12 +62,25 @@ IMPLEMENT(MemoryStream, i64, write, (void *self, const void *buf, size_t n))
 
     if (!buf || n == 0) goto done;
 
+    if (n > (size_t)-1 - this->position)
+    {
+        result = -1;
+        goto done;
+    }
+
     size_t required_capacity = this->position + n;
     if (required_capacity > this->capacity)
     {
         size_t new_capacity = this->capacity == 0 ? 64 : this->capacity * 2;
         while (new_capacity < required_capacity)
+        {
+            if (new_capacity > (size_t)-1 / 2)
+            {
+                result = -1;
+                goto done;
+            }
             new_capacity *= 2;
+        }
 
         char *new_buffer = (char *)realloc(this->buffer, new_capacity);
         if (!new_buffer)
@@ -78,6 +91,9 @@ IMPLEMENT(MemoryStream, i64, write, (void *self, const void *buf, size_t n))
         this->buffer = new_buffer;
         this->capacity = new_capacity;
     }
+
+    if (this->position > this->size)
+        memset(this->buffer + this->size, 0, this->position - this->size);
 
     memcpy(this->buffer + this->position, buf, n);
     this->position += n;
