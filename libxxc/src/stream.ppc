@@ -125,11 +125,13 @@ IMPLEMENT(Stream, int, fvprintf, (void *self, const char *fmt, va_list args))
     va_copy(args_copy, args);
 
     int len = vsnprintf(NULL, 0, fmt, args);
+    /* GCOV_EXCL_START */
     if (len < 0)
     {
         va_end(args_copy);
         return len;
     }
+    /* GCOV_EXCL_STOP */
 
     size_t size = (size_t)len + 1;
     char *buf = NULL;

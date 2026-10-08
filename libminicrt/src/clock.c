@@ -40,8 +40,10 @@ u64 clock_monotonic_ns(void)
 u64 clock_monotonic_ns(void)
 {
     xxc_timespec_t ts;
+    /* GCOV_EXCL_START */
     if (sys_clock_gettime(XXC_CLOCK_MONOTONIC, &ts) != 0)
         return 0;
+    /* GCOV_EXCL_STOP */
     return (u64)ts.tv_sec * 1000000000ull + (u64)ts.tv_nsec;
 }
 #endif

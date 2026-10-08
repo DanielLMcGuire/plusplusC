@@ -4,3 +4,4 @@
 initrd.img
 vmlinuz
 /build-cov
+xxc_test_a.tmp

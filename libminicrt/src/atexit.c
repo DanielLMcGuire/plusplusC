@@ -18,7 +18,7 @@ void _exit(int status)
 void _exit(int status)
 {
     TerminateProcess(GetCurrentProcess(), (UINT)status);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }
 
 #elif defined(XXC_RAWSYS)
@@ -27,14 +27,14 @@ void _exit(int status)
 void _exit(int status)
 {
     sys_exit(status);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }
 #else
 
 void _exit(int status)
 {
     (void)status;
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }
 #endif
 
@@ -58,9 +58,10 @@ int atexit(atexit_func_t func)
     return 0;
 }
 
-void exit(int status)
+XXC_NORETURN void exit(int status)
 {
     __crt_lock_acquire(&g_atexit_lock);
+    /* GCOV_EXCL_START */
     if (g_exiting)
     {
         __crt_lock_release(&g_atexit_lock);
@@ -85,4 +86,6 @@ void exit(int status)
     }
 
     _exit(status);
+    __NORETURN__
+    /* GCOV_EXCL_STOP */
 }

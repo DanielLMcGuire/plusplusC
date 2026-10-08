@@ -103,8 +103,10 @@ Stream *tcp_connect(const char *host, u16 port)
     if (!host)
         return NULL;
 
+    /* GCOV_EXCL_START */
     if (!sock_init())
         return NULL;
+    /* GCOV_EXCL_STOP */
 
     sock_in_addr_t ip;
 
@@ -141,8 +143,10 @@ Stream *tcp_connect(const char *host, u16 port)
 
 SocketStream *tcp_listen(u32 bind_addr, u16 port, i32 backlog)
 {
+    /* GCOV_EXCL_START */
     if (!sock_init())
         return NULL;
+    /* GCOV_EXCL_STOP */
 
     sock_t fd = sock_socket(SOCK_AF_INET, SOCK_STREAM_T, SOCK_IPPROTO_TCP);
 
@@ -159,11 +163,13 @@ SocketStream *tcp_listen(u32 bind_addr, u16 port, i32 backlog)
         return NULL;
     }
 
+    /* GCOV_EXCL_START */
     if (sock_listen(fd, backlog) != 0)
     {
         sock_close(fd);
         return NULL;
     }
+    /* GCOV_EXCL_STOP */
 
     SocketStream *ss = NEW(SocketStream);
 

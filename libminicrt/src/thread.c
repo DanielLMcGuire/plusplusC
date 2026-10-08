@@ -544,7 +544,7 @@ void thread_exit(void *retval)
     if (t)
         thread_finish(t, retval);
     ExitThread(0);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }
 
 void thread_yield(void) { SwitchToThread(); }

@@ -27,11 +27,11 @@ void freeArgs(void)
     FreeArgvA(argc, argv);
 }
 
-void start(void)
+XXC_NORETURN void start(void)
 {
     heap = GetProcessHeap();
     argv = GetArgvA(&argc);
     atexit(freeArgs);
     pluspluscBoot(argc, argv);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }

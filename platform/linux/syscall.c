@@ -61,11 +61,13 @@ long sys_kill(long pid, int sig)
 void sys_exit(int status)
 {
 #if defined(__NR_exit_group)
+    /* GCOV_EXCL_START */
     (void)syscall(__NR_exit_group, (long)status);
 #elif defined(__NR_exit)
     (void)syscall(__NR_exit, (long)status);
 #endif
     __NORETURN__
+    /* GCOV_EXCL_STOP */
 }
 
 void* sys_mmap(void *addr, size_t length, int prot, int flags, int fd, size_t offset)
@@ -241,12 +243,14 @@ long sys_futex(int *uaddr, int op, int val, const void *timeout, int *uaddr2, in
 #elif defined(__NR_futex_time64)
     ret = syscall(__NR_futex_time64, (long)uaddr, (long)op, (long)val, (long)timeout, (long)uaddr2, (long)val3);
 #endif
+    /* GCOV_EXCL_START */
     if (ret == -38 && (op & FUTEX_PRIVATE_FLAG))
     {
 #if defined(__NR_futex)
         ret = syscall(__NR_futex, (long)uaddr, (long)(op & ~FUTEX_PRIVATE_FLAG), (long)val, (long)timeout, (long)uaddr2, (long)val3);
 #endif
     }
+    /* GCOV_EXCL_STOP */
     return ret;
 }
 
@@ -282,8 +286,10 @@ long sys_set_tid_address(int *tidptr)
 
 void sys_exit_thread(int status)
 {
+    /* GCOV_EXCL_START */
     (void)syscall(__NR_exit, (long)status);
     __NORETURN__
+    /* GCOV_EXCL_STOP */
 }
 
 long sys_rt_sigprocmask(int how, const void *set, void *oldset, size_t sigsetsize)

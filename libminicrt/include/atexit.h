@@ -15,10 +15,14 @@ typedef void (*atexit_func_t)(void);
 int  atexit(atexit_func_t func);
 void exit(int status);
 
-void _exit(int status);
+XXC_NORETURN void _exit(int status);
 
 #ifndef _WIN32
-static inline void _Exit(int status) { _exit(status); }
+XXC_NORETURN static inline void _Exit(int status) 
+{ 
+    _exit(status); 
+    __NORETURN__ // GCOV_EXCL_LINE
+} 
 #endif
 
 #endif /* ATEXIT_H */

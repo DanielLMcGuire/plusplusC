@@ -16,7 +16,7 @@ extern void xxc_io_init(void);
 #ifdef _WIN32
 #include <windows.h>
 
-void pluspluscBoot(int argc, char **argv)
+XXC_NORETURN void pluspluscBoot(int argc, char **argv)
 {
     sio_init(STD_OUTPUT_HANDLE, STD_ERROR_HANDLE);
 
@@ -27,14 +27,16 @@ void pluspluscBoot(int argc, char **argv)
     int ret = program(args);
     
     parr_free(&args);
+    /* GCOV_EXCL_START */
     exit(ret);
     __NORETURN__
+    /* GCOV_EXCL_STOP */
 }
 
 #elif defined(XXC_RAWSYS)
 #include <xxc_sys.h>
 
-void pluspluscBoot(int argc, char **argv)
+XXC_NORETURN void pluspluscBoot(int argc, char **argv)
 {
     __xxc_platform_init(argc, argv);
     sio_init(0, 0);
@@ -42,8 +44,10 @@ void pluspluscBoot(int argc, char **argv)
     parr_t args = parr_new((const void**)argv, (size_t)argc);
     int ret = program(args);
     parr_free(&args);
+    /* GCOV_EXCL_START */
     exit(ret);
     __NORETURN__
+    /* GCOV_EXCL_STOP */
 }
 
 #endif

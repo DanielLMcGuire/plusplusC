@@ -88,5 +88,5 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     parr_free(&args);
 
     exit(ret);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }

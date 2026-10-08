@@ -55,7 +55,7 @@ long sys_kill(long pid, int sig)
 void sys_exit(int status)
 {
     (void)syscall(XXC_SYS_exit, (long)status);
-    __NORETURN__
+    __NORETURN__ // GCOV_EXCL_LINE
 }
 
 void* sys_mmap(void *addr, size_t length, int prot, int flags, int fd, size_t offset)
