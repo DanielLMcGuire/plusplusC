@@ -1,0 +1,9 @@
+# FILE|SPEC|REASON
+# SPEC is a line number, a range N-M, or a /regex/
+
+libminicrt/include/crt_lock.h|45-66|lock released by another CPU during the 40-iteration spin; needs >= 2 cores
+platform/shared/alloc.c|360-370|race: heap re-adopted by another thread between two idle checks
+
+platform/shared/tls.c|202-264|tls_snapshot_dynamic and helpers (shared-library start-up)
+platform/shared/tls.c|269-277|has_interp() branch of __xxc_platform_init
+platform/shared/tls.c|283-287|TLS block mmap failure during process start-up
