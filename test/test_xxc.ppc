@@ -1,0 +1,897 @@
+// ++C Runtime Library
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <def.h>
+#include <cio.h>
+#include <str.h>
+#include <mem.h>
+#include <dstr.h>
+#include <parr.h>
+#include <alloc.h>
+#include <class.pph>
+#include <stream.pph>
+#include <mems.pph>
+#include <files.pph>
+#include <fs.pph>
+#include <ios.pph>
+#include <map.pph>
+#include <runnable.pph>
+#include <thread.pph>
+#include <argparse.pph>
+#include <app.pph>
+#include "test.h"
+#include "test_util.h"
+
+CLASS(Counter)
+{
+    FIELD(int, value)
+};
+CLASS_EXPORT(Counter);
+CLASS_INFO_ROOT(Counter);
+
+static int g_counter_dtors = 0;
+
+CONSTRUCTOR(Counter) { self->value = 41; }
+DECONSTRUCTOR(Counter) { g_counter_dtors++; }
+
+CLASS(Other)
+{
+    FIELD(int, x)
+};
+CLASS_EXPORT(Other);
+CLASS_INFO_ROOT(Other);
+CONSTRUCTOR(Other) { self->x = 0; }
+DECONSTRUCTOR(Other) { (void)self; }
+
+static bool test_class_runtime(void)
+{
+    Counter *c = NEW(Counter);
+    ASSERT(c != NULL && c->value == 41);
+    ASSERT(IS_A(c, Counter));
+    ASSERT(!IS_A(c, Other));
+    ASSERT(AS(Counter, c) == c);
+    ASSERT(AS(Other, c) == NULL);
+    ASSERT(c_class(c) == &Counter__Class);
+
+    ASSERT(c_class(NULL) == NULL);
+    ASSERT(!IS_A(NULL, Counter));
+    ASSERT(c_is_a(c, NULL) == 0);
+    ASSERT(c_new(NULL) == NULL);
+    c_delete(NULL);
+    c_scoped_delete(NULL);
+    c_init_class(NULL);
+
+    int before = g_counter_dtors;
+    REMOVE(c);
+    ASSERT(g_counter_dtors == before + 1);
+
+    {
+        SCOPED_NEW(Counter, sc);
+        ASSERT(sc != NULL);
+    }
+    ASSERT(g_counter_dtors == before + 2);
+
+    Counter *p = NEW(Counter);
+    c_scoped_delete(&p);
+    ASSERT(p == NULL);
+    ASSERT(g_counter_dtors == before + 3);
+    c_scoped_delete(&p);
+    ASSERT(g_counter_dtors == before + 3);
+    return true;
+}
+
+static int stream_vprintf(Stream *s, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int r = s->fvprintf(s, fmt, ap);
+    va_end(ap);
+    return r;
+}
+
+static bool test_stream_base_class(void)
+{
+    Stream *s = NEW(Stream);
+    ASSERT(s != NULL);
+
+    char buf[4];
+    ASSERT(CALL2(s, read, buf, 4) == -1);
+    ASSERT(CALL2(s, write, "x", 1) == -1);
+    ASSERT(CALL2(s, seek, 0, FS_SEEK_SET) == -1);
+    ASSERT(CALL0(s, tell) == -1);
+    ASSERT(CALL0(s, eof) == 1);
+    CALL0(s, close);
+
+    ASSERT(CALL1(s, fprint, "abc") == -1);
+    ASSERT(CALL1(s, fprint, NULL) == 0);
+    ASSERT(CALL1(s, fprintln, "abc") == -1);
+    ASSERT(CALL1(s, fprintln, NULL) == -1);
+    ASSERT(CALL2(s, fprintf, "%d", 12345) == 5);
+    REMOVE(s);
+    return true;
+}
+
+static bool test_stream_print_helpers(void)
+{
+    MemoryStream *ms = NEW(MemoryStream);
+    Stream *s = AS(Stream, ms);
+    ASSERT(s != NULL);
+
+    ASSERT(CALL1(s, fprint, "ab") == 2);
+    ASSERT(CALL1(s, fprint, NULL) == 0);
+    ASSERT(CALL1(s, fprintln, "cd") == 3);
+    ASSERT(CALL1(s, fprintln, NULL) == 1);
+    ASSERT(CALL2(s, fprintf, "<%d>", 7) == 3);
+    ASSERT(stream_vprintf(s, "[%s]", "v") == 3);
+
+    ASSERT(ms->size == 12);
+    ASSERT(memcmp(mstream_get_buffer(ms), "abcd\n\n<7>[v]", 12) == 0);
+
+
+    static char big[3000];
+    for (int i = 0; i < 2999; i++)
+        big[i] = (char)('a' + (i % 26));
+    big[2999] = '\0';
+
+    CALL0(s, close);
+    ASSERT(CALL1(s, fprintln, big) == 3000);
+    ASSERT(CALL2(s, fprintf, "%s", big) == 2999);
+    ASSERT(stream_vprintf(s, "%s", big) == 2999);
+    ASSERT(ms->size == 3000 + 2999 + 2999);
+    ASSERT(ms->buffer[2999] == '\n');
+    ASSERT(memcmp(ms->buffer + 3000, big, 2999) == 0);
+    REMOVE(ms);
+    return true;
+}
+
+static bool test_memstream_edge_cases(void)
+{
+    MemoryStream *ms = NEW(MemoryStream);
+    Stream *s = AS(Stream, ms);
+    char buf[32];
+
+    ASSERT(mstream_get_buffer(NULL) == NULL);
+    ASSERT(mstream_get_buffer(ms) == NULL);
+    ASSERT(CALL0(s, eof) == 1);
+    ASSERT(CALL2(s, read, buf, 8) == 0);
+    ASSERT(CALL2(s, read, NULL, 8) == 0);
+    ASSERT(CALL2(s, write, NULL, 8) == 0);
+    ASSERT(CALL2(s, write, "x", 0) == 0);
+
+    ASSERT(CALL2(s, write, "0123456789", 10) == 10);
+    ASSERT(CALL0(s, tell) == 10);
+    ASSERT(CALL0(s, eof) == 1);
+
+    ASSERT(CALL2(s, seek, 2, FS_SEEK_SET) == 2);
+    ASSERT(CALL2(s, seek, 3, FS_SEEK_CUR) == 5);
+    ASSERT(CALL2(s, seek, -4, FS_SEEK_END) == 6);
+    ASSERT(CALL2(s, seek, -1, FS_SEEK_SET) == -1);
+    ASSERT(CALL2(s, seek, -100, FS_SEEK_CUR) == -1);
+    ASSERT(CALL2(s, seek, 0, 99) == -1);
+    ASSERT(CALL0(s, tell) == 6);
+
+    ASSERT(CALL2(s, read, buf, 100) == 4);
+    ASSERT(memcmp(buf, "6789", 4) == 0);
+    ASSERT(CALL2(s, read, buf, 1) == 0);
+
+    CALL2(s, seek, 1, FS_SEEK_SET);
+    ASSERT(CALL2(s, write, "AB", 2) == 2);
+    ASSERT(ms->size == 10);
+    CALL2(s, seek, 0, FS_SEEK_END);
+    char chunk[200];
+    memset(chunk, 'z', sizeof(chunk));
+    ASSERT(CALL2(s, write, chunk, sizeof(chunk)) == 200);
+    ASSERT(ms->size == 210 && ms->capacity >= 210);
+    ASSERT(memcmp(ms->buffer, "0AB3456789", 10) == 0);
+
+    CALL2(s, seek, 5000, FS_SEEK_SET);
+    ASSERT(CALL2(s, write, "!", 1) == 1);
+    ASSERT(ms->size == 5001 && ms->capacity >= 5001);
+
+    CALL0(s, close);
+    ASSERT(ms->buffer == NULL && ms->size == 0 && ms->capacity == 0);
+    CALL0(s, close);
+    ASSERT(CALL0(s, tell) == 0);
+    REMOVE(ms);
+
+    ms = NEW(MemoryStream);
+    s = AS(Stream, ms);
+    ASSERT(CALL2(s, write, "ab", 2) == 2);
+    ASSERT(CALL2(s, write, "x", (size_t)-1) == -1);
+    ASSERT(CALL2(s, write, "x", ((size_t)1 << 63) + 5) == -1);
+    ASSERT(ms->size == 2);
+    REMOVE(ms);
+
+    ms = NEW(MemoryStream);
+    s = AS(Stream, ms);
+    ASSERT(CALL2(s, write, "x", (size_t)1 << 46) == -1);
+    ASSERT(ms->size == 0);
+    REMOVE(ms);
+    return true;
+}
+
+static bool test_memstream_gap_reads_as_zero(void)
+{
+    MemoryStream *ms = NEW(MemoryStream);
+    Stream *s = AS(Stream, ms);
+
+    char dirty[64];
+    memset(dirty, 'D', sizeof(dirty));
+    ASSERT(CALL2(s, write, dirty, sizeof(dirty)) == 64);
+    CALL2(s, seek, 4, FS_SEEK_SET);
+    CALL0(s, close);
+
+    ASSERT(CALL2(s, write, "ab", 2) == 2);
+    ASSERT(CALL2(s, seek, 10, FS_SEEK_SET) == 10);
+    ASSERT(CALL2(s, write, "c", 1) == 1);
+    ASSERT(ms->size == 11);
+    ASSERT(memcmp(ms->buffer, "ab\0\0\0\0\0\0\0\0c", 11) == 0);
+    REMOVE(ms);
+    return true;
+}
+
+static bool test_freadline_memstream(void)
+{
+    MemoryStream *ms = NEW(MemoryStream);
+    Stream *s = AS(Stream, ms);
+    ASSERT(CALL1(s, fprint, "one\r\ntwo\n\nlast") == 14);
+    CALL2(s, seek, 0, FS_SEEK_SET);
+
+    dstr_t line;
+    ASSERT(freadline(s, &line) == 5);
+    ASSERT_STR_EQ(line.data, "one");
+    dstr_free(&line);
+    ASSERT(freadline(s, &line) == 4);
+    ASSERT_STR_EQ(line.data, "two");
+    dstr_free(&line);
+    ASSERT(freadline(s, &line) == 1);
+    ASSERT_STR_EQ(line.data, "");
+    dstr_free(&line);
+    ASSERT(freadline(s, &line) == 4);
+    ASSERT_STR_EQ(line.data, "last");
+    dstr_free(&line);
+    ASSERT(freadline(s, &line) == 0);
+    ASSERT_STR_EQ(line.data, "");
+    dstr_free(&line);
+
+    ASSERT(freadline(NULL, &line) == -1);
+    ASSERT(freadline(s, NULL) == -1);
+    ASSERT(fwrite(NULL, "x") == -1);
+    ASSERT(fwrite(s, NULL) == -1);
+    REMOVE(ms);
+    return true;
+}
+
+#define TMP_A "xxc_test_a.tmp"
+#define TMP_B "xxc_test_b.tmp"
+
+static void tmp_cleanup(void)
+{
+#if defined(__linux__) || defined(__FreeBSD__)
+    sys_unlink(TMP_A);
+    sys_unlink(TMP_B);
+#endif
+}
+
+#if defined(__linux__) || defined(__FreeBSD__)
+
+static bool test_filestream_modes(void)
+{
+    tmp_cleanup();
+    char buf[64];
+
+    Stream *w = fopen_str(TMP_A, "w");
+    ASSERT(w != NULL);
+    ASSERT(fwrite(w, "hello\n") == 6);
+    ASSERT(CALL1(w, fprintln, "world") == 6);
+    ASSERT(CALL3(w, fprintf, "%d-%s\n", 7, "x") == 4);
+    ASSERT(CALL2(w, read, buf, 4) < 0);
+    ASSERT(CALL0(w, tell) == 16);
+    REMOVE(w);
+
+    Stream *r = fopen_str(TMP_A, "r");
+    ASSERT(r != NULL);
+    ASSERT(CALL0(r, eof) == 0);
+    ASSERT(CALL2(r, write, "x", 1) < 0);
+    ASSERT(CALL2(r, read, buf, 6) == 6);
+    ASSERT(memcmp(buf, "hello\n", 6) == 0);
+    ASSERT(CALL0(r, tell) == 6);
+    ASSERT(CALL2(r, read, buf, 63) == 10);
+    ASSERT(CALL0(r, eof) == 0);
+    ASSERT(CALL2(r, read, buf, 63) == 0);
+    ASSERT(CALL0(r, eof) == 1);
+    ASSERT(CALL2(r, seek, 0, FS_SEEK_SET) == 0);
+    ASSERT(CALL0(r, eof) == 0);
+    ASSERT(CALL2(r, seek, 2, FS_SEEK_CUR) == 2);
+    ASSERT(CALL2(r, seek, -3, FS_SEEK_END) == 13);
+    ASSERT(CALL2(r, seek, 0, 99) < 0);
+    CALL0(r, close);
+    ASSERT(CALL2(r, read, buf, 1) < 0);
+    ASSERT(CALL0(r, tell) < 0);
+    CALL0(r, close);
+    REMOVE(r);
+
+    Stream *a = fopen_str(TMP_A, "a");
+    ASSERT(a != NULL);
+    ASSERT(fwrite(a, "tail") == 4);
+    REMOVE(a);
+    Stream *ap = fopen_str(TMP_A, "a+");
+    ASSERT(ap != NULL);
+    ASSERT(CALL2(ap, seek, 0, FS_SEEK_SET) == 0);
+    ASSERT(CALL2(ap, read, buf, 63) == 20);
+    ASSERT(memcmp(buf + 16, "tail", 4) == 0);
+    REMOVE(ap);
+
+    Stream *rp = fopen_str(TMP_A, "r+");
+    ASSERT(rp != NULL);
+    ASSERT(fwrite(rp, "HE") == 2);
+    ASSERT(CALL2(rp, seek, 0, FS_SEEK_SET) == 0);
+    ASSERT(CALL2(rp, read, buf, 5) == 5);
+    ASSERT(memcmp(buf, "HEllo", 5) == 0);
+    REMOVE(rp);
+
+    Stream *wp = fopen_str(TMP_A, "w+");
+    ASSERT(wp != NULL);
+    ASSERT(CALL2(wp, read, buf, 4) == 0);
+    ASSERT(fwrite(wp, "abc") == 3);
+    ASSERT(CALL2(wp, seek, 0, FS_SEEK_SET) == 0);
+    ASSERT(CALL2(wp, read, buf, 8) == 3);
+    REMOVE(wp);
+
+    tmp_cleanup();
+    return true;
+}
+
+static bool test_filestream_open_errors(void)
+{
+    tmp_cleanup();
+    ASSERT(fopen_str(TMP_A, "r") == NULL);
+    ASSERT(fopen_str("no_such_dir_xxc/f.tmp", "w") == NULL);
+    ASSERT(fopen_str(TMP_A, "x") == NULL);
+    ASSERT(fopen_str(TMP_A, "") == NULL);
+    ASSERT(fopen_str(TMP_A, NULL) == NULL);
+    ASSERT(fopen_str(NULL, "r") == NULL);
+    ASSERT(fopen(NULL, "r") == NULL);
+    ASSERT(fopen(NULL, NULL) == NULL);
+
+    dstr_t name = dstr_new(TMP_B);
+    FSPath *p = fs_path(name);
+    dstr_free(&name);
+    ASSERT(fopen(p, "") == NULL);
+    ASSERT(fopen(p, NULL) == NULL);
+    ASSERT(fopen(p, "q") == NULL);
+    ASSERT(fopen(p, "r") == NULL);
+
+    Stream *s = fopen(p, "w");
+    ASSERT(s != NULL);
+    ASSERT(fwrite(s, "ok") == 2);
+    REMOVE(s);
+    ASSERT(CALL0(p, remove));
+    REMOVE(p);
+    return true;
+}
+
+static bool test_filestream_unowned_and_invalid(void)
+{
+    Stream *out = cout();
+    ASSERT(out != NULL && cerr() != NULL && cin() != NULL);
+    CALL0(out, close);
+    capture_t cap;
+    char text[32];
+    ASSERT(capture_begin(&cap, 1));
+    ASSERT(CALL1(out, fprint, "still open") == 10);
+    capture_end(&cap, text, sizeof(text));
+    ASSERT_STR_EQ(text, "still open");
+
+    FileStream *fs = NEW(FileStream);
+    ASSERT(fs != NULL && fs->fd == -1);
+    Stream *s = AS(Stream, fs);
+    char b[4];
+    ASSERT(CALL2(s, read, b, 4) < 0);
+    ASSERT(CALL2(s, write, "x", 1) < 0);
+    ASSERT(CALL2(s, seek, 0, FS_SEEK_SET) < 0);
+    ASSERT(CALL0(s, tell) < 0);
+    ASSERT(CALL0(s, eof) == 0);
+    CALL0(s, close);
+    REMOVE(fs);
+    return true;
+}
+
+static int child_stdin_lines(void *arg)
+{
+    (void)arg;
+    long fd = sys_openat(AT_FDCWD, TMP_A, O_RDONLY, 0);
+    if (fd < 0)
+        return 10;
+    syscall(__NR_dup3, fd, 0L, 0L);
+
+    dstr_t line;
+    if (freadline(cin(), &line) != 4 || strcmp(line.data, "ab") != 0) return 11;
+    dstr_free(&line);
+    if (freadline(cin(), &line) != 2 || strcmp(line.data, "c") != 0) return 12;
+    dstr_free(&line);
+    if (freadline(cin(), &line) != 0 || line.len != 0) return 13;
+    dstr_free(&line);
+    return 0;
+}
+
+static bool test_cin_reads_stdin(void)
+{
+    tmp_cleanup();
+    Stream *w = fopen_str(TMP_A, "w");
+    ASSERT(w != NULL);
+    ASSERT(fwrite(w, "ab\r\nc\n") == 6);
+    REMOVE(w);
+    int st = run_in_child(child_stdin_lines, NULL);
+    tmp_cleanup();
+    ASSERT(st == 0);
+    return true;
+}
+#endif /* __linux__ || __FreeBSD__ */
+
+static dstr_t path_str(FSPath *p)
+{
+    return CALL0(p, data);
+}
+
+static bool test_fspath_components(void)
+{
+    dstr_t in = dstr_new("a//b\\c/");
+    FSPath *p = fs_path(in);
+    dstr_free(&in);
+    dstr_t s = path_str(p);
+    ASSERT_STR_EQ(s.data, "a/b/c");
+    dstr_free(&s);
+
+    CALL1(p, join, "d/e");
+    CALL1(p, join, NULL);
+    CALL1(p, join, "");
+    s = path_str(p);
+    ASSERT_STR_EQ(s.data, "a/b/c/d/e");
+    dstr_free(&s);
+
+    FSPath *parent = CALL0(p, parent);
+    FSPath *base = CALL0(p, base);
+    FSPath *rel = CALL0(p, relative);
+    dstr_t ps = path_str(parent), bs = path_str(base), rs = path_str(rel);
+    ASSERT_STR_EQ(ps.data, "a/b/c/d");
+    ASSERT_STR_EQ(bs.data, "e");
+    ASSERT_STR_EQ(rs.data, "a/b/c/d/e");
+    dstr_free(&ps); dstr_free(&bs); dstr_free(&rs);
+    REMOVE(parent); REMOVE(base); REMOVE(rel); REMOVE(p);
+
+    dstr_t empty = dstr_new("");
+    FSPath *e = fs_path(empty);
+    dstr_free(&empty);
+    FSPath *ep = CALL0(e, parent), *eb = CALL0(e, base), *er = CALL0(e, relative);
+    dstr_t d1 = path_str(ep), d2 = path_str(eb), d3 = path_str(er);
+    ASSERT(d1.len == 0 && d2.len == 0 && d3.len == 0);
+    dstr_free(&d1); dstr_free(&d2); dstr_free(&d3);
+    REMOVE(ep); REMOVE(eb); REMOVE(er); REMOVE(e);
+
+    dstr_t none = {0, 0, 0};
+    FSPath *n = fs_path(none);
+    ASSERT(n != NULL && n->dsData.len == 0);
+    REMOVE(n);
+
+    char longname[400];
+    memset(longname, 'q', 399);
+    longname[399] = '\0';
+    dstr_t ln = dstr_new(longname);
+    FSPath *lp = fs_path(ln);
+    dstr_free(&ln);
+    dstr_t ls = path_str(lp);
+    ASSERT(ls.len == 255);
+    dstr_free(&ls);
+    REMOVE(lp);
+    return true;
+}
+
+#if defined(__linux__) || defined(__FreeBSD__)
+static bool path_is(FSPath *p, const char *expected)
+{
+    dstr_t s = CALL0(p, data);
+    bool same = s.data && strcmp(s.data, expected) == 0;
+    if (!same)
+        printf("  path is '%s', expected '%s'\n", s.data ? s.data : "(null)", expected);
+    dstr_free(&s);
+    return same;
+}
+
+static bool test_fspath_absolute(void)
+{
+    dstr_t in = dstr_new("/tmp/x/y");
+    FSPath *p = fs_path(in);
+    dstr_free(&in);
+    ASSERT(p->absolute);
+    ASSERT(path_is(p, "/tmp/x/y"));
+
+    FSPath *parent = CALL0(p, parent);
+    FSPath *base = CALL0(p, base);
+    FSPath *rel = CALL0(p, relative);
+    ASSERT(path_is(parent, "/tmp/x"));
+    ASSERT(path_is(base, "y") && !base->absolute);
+    ASSERT(path_is(rel, "tmp/x/y") && !rel->absolute);
+    REMOVE(base); REMOVE(rel);
+
+    FSPath *up = CALL0(parent, parent);
+    FSPath *root = CALL0(up, parent);
+    FSPath *still_root = CALL0(root, parent);
+    ASSERT(path_is(up, "/tmp"));
+    ASSERT(path_is(root, "/"));
+    ASSERT(path_is(still_root, "/"));
+    FSPath *root_base = CALL0(root, base);
+    ASSERT(path_is(root_base, ""));
+    REMOVE(parent); REMOVE(up); REMOVE(root); REMOVE(still_root); REMOVE(root_base);
+
+    CALL1(p, join, "z");
+    ASSERT(path_is(p, "/tmp/x/y/z"));
+    REMOVE(p);
+
+    dstr_t win = dstr_new("\\var\\log");
+    FSPath *w = fs_path(win);
+    dstr_free(&win);
+    ASSERT(path_is(w, "/var/log"));
+    REMOVE(w);
+
+    dstr_t slash = dstr_new("/");
+    FSPath *r = fs_path(slash);
+    dstr_free(&slash);
+    ASSERT(r->absolute && path_is(r, "/"));
+    REMOVE(r);
+
+    dstr_t rel_in = dstr_new("a");
+    FSPath *a = fs_path(rel_in);
+    dstr_free(&rel_in);
+    CALL1(a, join, "/b");
+    ASSERT(!a->absolute && path_is(a, "a/b"));
+    REMOVE(a);
+    return true;
+}
+
+static bool test_fspath_touch_remove(void)
+{
+    tmp_cleanup();
+    dstr_t name = dstr_new(TMP_B);
+    FSPath *p = fs_path(name);
+    dstr_free(&name);
+
+    ASSERT(!CALL0(p, remove));
+    ASSERT(CALL0(p, touch));
+    ASSERT(CALL0(p, touch));
+    Stream *s = fopen(p, "r");
+    ASSERT(s != NULL);
+    REMOVE(s);
+    ASSERT(CALL0(p, remove));
+    ASSERT(!CALL0(p, remove));
+    REMOVE(p);
+
+    dstr_t bad = dstr_new("no_such_dir_xxc/f.tmp");
+    FSPath *bp = fs_path(bad);
+    dstr_free(&bad);
+    ASSERT(!CALL0(bp, touch));
+    REMOVE(bp);
+    return true;
+}
+#endif
+
+static bool test_map_byte_keys(void)
+{
+    Map *m = NEW(Map);
+    const char k1[] = {'a', '\0', 'b'};
+    const char k2[] = {'a', '\0', 'c'};
+    ASSERT(CALL3(m, set_bytes, k1, 3, (void *)1));
+    ASSERT(CALL3(m, set_bytes, k2, 3, (void *)2));
+    ASSERT(CALL2(m, get_bytes, k1, 3) == (void *)1);
+
+    void *out = NULL;
+    ASSERT(CALL3(m, try_get_bytes, k2, 3, &out));
+    ASSERT(out == (void *)2);
+    out = (void *)0x77;
+    ASSERT(!CALL3(m, try_get_bytes, "zz", 2, &out));
+    ASSERT(CALL2(m, contains_bytes, k1, 3));
+    ASSERT(!CALL2(m, contains_bytes, k1, 2));
+    ASSERT(CALL2(m, remove_bytes, k1, 3));
+    ASSERT(!CALL2(m, remove_bytes, k1, 3));
+    ASSERT(CALL0(m, len) == 1);
+    REMOVE(m);
+    return true;
+}
+
+static void *return_arg(void *arg) { return arg; }
+
+CLASS(Job, Runnable)
+{
+    BASE(Runnable)
+    FIELD(int, runs)
+};
+CLASS_EXPORT(Job);
+METHOD_PROTO(Job, void *, run, (void *self));
+CLASS_INFO(Job, Runnable);
+CONSTRUCTOR(Job) { SUPER_CTOR(self, Runnable); self->runs = 0; METHOD_LINK(base, Job, run); }
+DECONSTRUCTOR(Job) { SUPER_DTOR(self, Runnable); }
+IMPLEMENT(Job, void *, run, (void *self)) { ((Job *)self)->runs++; return (void *)9; }
+
+static bool test_runnable_and_thread_guards(void)
+{
+    Runnable *r = NEW(Runnable);
+    ASSERT(r != NULL);
+    ASSERT(CALL0(r, run) == NULL);
+    REMOVE(r);
+
+    Thread *none = NEW(Thread);
+    ASSERT(!CALL0(none, start));
+    ASSERT(!CALL0(none, start_detached));
+    ASSERT(!CALL0(none, is_joinable));
+    ASSERT(!CALL0(none, detach));
+    ASSERT(CALL0(none, join) == NULL);
+    ASSERT(CALL0(none, get_id) == 0);
+    REMOVE(none);
+
+    ASSERT(thread_new_fn(NULL, NULL) == NULL);
+
+    Job *job = NEW(Job);
+    Thread *t = thread_new((Runnable *)job);
+    ASSERT(t != NULL);
+    ASSERT(CALL0(t, start));
+    ASSERT(!CALL0(t, start));
+    ASSERT(!CALL0(t, start_detached));
+    ASSERT(CALL0(t, is_joinable));
+    ASSERT(CALL0(t, get_id) != 0);
+    ASSERT(CALL0(t, join) == (void *)9);
+    ASSERT(!CALL0(t, is_joinable));
+    ASSERT(CALL0(t, join) == NULL);
+    ASSERT(!CALL0(t, detach));
+    ASSERT(job->runs == 1);
+    REMOVE(t);
+    REMOVE(job);
+
+    Thread *d = thread_new_fn(return_arg, (void *)1);
+    ASSERT(d != NULL && IS_A(d->target, Runnable));
+
+    Thread *dd = thread_new_fn(return_arg, (void *)1);
+    ASSERT(CALL0(dd, start));
+    ASSERT(thread_detach(dd->handle) == THREAD_SUCCESS);
+    ASSERT(!CALL0(dd, detach));
+    REMOVE(dd);
+
+    ASSERT(CALL0(d, start));
+    ASSERT(CALL0(d, detach));
+    ASSERT(!CALL0(d, is_joinable));
+    REMOVE(d);
+    thread_sleep_ms(20);
+    return true;
+}
+
+static parr_t make_argv(const char *first, ...)
+{
+    parr_t a = parr_new(NULL, 0);
+    va_list ap;
+    va_start(ap, first);
+    for (const char *s = first; s; s = va_arg(ap, const char *))
+        parr_append_cstr(&a, s);
+    va_end(ap);
+    return a;
+}
+
+static bool test_argparser(void)
+{
+    ArgParser *ap = NEW(ArgParser);
+    CALL2(ap, add_flag, "verbose", "Be chatty");
+    CALL2(ap, add_value_flag, "name", "Your name");
+    CALL2(ap, add_value_flag, "out", "Output file");
+
+    ASSERT(!CALL1(ap, get_bool, "verbose"));
+    ASSERT(!CALL1(ap, get_bool, "missing"));
+    ASSERT_STR_EQ(CALL2(ap, get_string, "name", "dflt"), "dflt");
+    CALL1(ap, parse, NULL);
+
+    parr_t argv = make_argv("prog", "-v", "plain", "--verbose", "--name", "Bob", "--out", NULL);
+    parr_append_val(&argv, NULL);
+    parr_append_cstr(&argv, "--bogus");
+    parr_append_cstr(&argv, "--name");
+
+    char out[128];
+    capture_t cap;
+    ASSERT(capture_begin(&cap, 1));
+    CALL1(ap, parse, &argv);
+    capture_end(&cap, out, sizeof(out));
+    ASSERT_STR_EQ(out, "Unknown option: --bogus\n");
+
+    ASSERT(CALL1(ap, get_bool, "verbose"));
+    ASSERT(CALL1(ap, get_bool, "name"));
+    ASSERT(!CALL1(ap, get_bool, "bogus"));
+    ASSERT_STR_EQ(CALL2(ap, get_string, "name", "dflt"), "Bob");
+    ASSERT_STR_EQ(CALL2(ap, get_string, "out", "dflt"), "");
+    ASSERT_STR_EQ(CALL2(ap, get_string, "verbose", "dflt"), "dflt");
+    ASSERT_STR_EQ(CALL2(ap, get_string, "nothere", "dflt"), "dflt");
+
+    parr_append_val(&ap->flags, NULL);
+    ASSERT(capture_begin(&cap, 1));
+    CALL0(ap, print_flags);
+    capture_end(&cap, out, sizeof(out));
+    ASSERT_STR_EQ(out,
+        "  --verbose       Be chatty\n"
+        "  --name <value>  Your name\n"
+        "  --out <value>   Output file\n");
+
+    parr_free_c_strings(&argv);
+    REMOVE(ap);
+    return true;
+}
+
+CLASS(TestApp, Application)
+{
+    BASE(Application)
+    FIELD(int, ran)
+};
+CLASS_EXPORT(TestApp);
+METHOD_PROTO(TestApp, int, run, (void *self));
+METHOD_PROTO(TestApp, void, configure_args, (void *self));
+CLASS_INFO(TestApp, Application);
+
+CONSTRUCTOR(TestApp)
+{
+    SUPER_CTOR(self, Application);
+    self->ran = 0;
+    METHOD_LINK(base, TestApp, run);
+    METHOD_LINK(base, TestApp, configure_args);
+}
+DECONSTRUCTOR(TestApp) { SUPER_DTOR(self, Application); }
+
+IMPLEMENT(TestApp, int, run, (void *self))
+{
+    ((TestApp *)self)->ran++;
+    return 5;
+}
+
+IMPLEMENT(TestApp, void, configure_args, (void *self))
+{
+    TestApp *t = (TestApp *)self;
+    CALL2(t->base.args, add_flag, "verbose", "Be chatty");
+    CALL2(t->base.args, add_value_flag, "name", "Your name");
+}
+
+static bool test_application(void)
+{
+    char out[256];
+    capture_t cap;
+
+    Application *plain = NEW(Application);
+    CALL1(plain, parse_args, NULL);
+    ASSERT_STR_EQ(plain->program.data, "app");
+    ASSERT(!plain->show_help);
+    ASSERT(CALL0(plain, main) == 0);
+    REMOVE(plain);
+
+    TestApp *app = NEW(TestApp);
+    Application *base = AS(Application, app);
+    parr_t argv = make_argv("/usr/local/bin/tool", "--verbose", "--name", "Bob", NULL);
+    CALL1(base, parse_args, &argv);
+    ASSERT_STR_EQ(base->program.data, "tool");
+    ASSERT(!base->show_help);
+    ASSERT(CALL1(base->args, get_bool, "verbose"));
+    ASSERT_STR_EQ(CALL2(base->args, get_string, "name", ""), "Bob");
+    ASSERT(CALL0(base, main) == 5);
+    ASSERT(app->ran == 1);
+    parr_free_c_strings(&argv);
+    REMOVE(app);
+
+    app = NEW(TestApp);
+    base = AS(Application, app);
+    argv = make_argv("tool", "--help", NULL);
+    CALL1(base, parse_args, &argv);
+    ASSERT(base->show_help);
+    ASSERT(capture_begin(&cap, 1));
+    int rc = CALL0(base, main);
+    capture_end(&cap, out, sizeof(out));
+    ASSERT(rc == 0 && app->ran == 0);
+    ASSERT_STR_EQ(out,
+        "Usage: tool [OPTIONS...]\n"
+        "OPTIONS:\n"
+        "  --help          Show this help message and exit\n"
+        "  --verbose       Be chatty\n"
+        "  --name <value>  Your name\n");
+    parr_free_c_strings(&argv);
+    REMOVE(app);
+
+    plain = NEW(Application);
+    parr_t empty = parr_new(NULL, 0);
+    CALL1(plain, parse_args, &empty);
+    ASSERT_STR_EQ(plain->program.data, "app");
+    parr_free(&empty);
+
+    Application *fresh = NEW(Application);
+    ASSERT(capture_begin(&cap, 1));
+    CALL0(fresh, print_help);
+    capture_end(&cap, out, sizeof(out));
+    ASSERT_STR_EQ(out, "Usage: app [OPTIONS...]\nOPTIONS:\n");
+    REMOVE(fresh);
+    REMOVE(plain);
+    return true;
+}
+
+static int child_xxc_out_of_memory(void *arg)
+{
+    (void)arg;
+
+    FileStream *probe = (FileStream *)fopen_str(TMP_A, "w");
+    if (!probe) return 10;
+    REMOVE(probe);
+
+    MemoryStream *ms = NEW(MemoryStream);
+    ArgParser *ap = NEW(ArgParser);
+    Thread *with_target = thread_new_fn(return_arg, NULL);
+    if (!ms || !ap || !with_target) return 11;
+    size_t fr_usable = malloc_usable_size(c_header(with_target->target));
+
+    unsigned long lim[2] = {1, 1};
+    syscall(__NR_setrlimit, 9L, (long)lim);
+    if (CALL0(with_target, start))          return 20;
+    if (CALL0(with_target, start_detached)) return 21;
+
+    void *held = oom_begin();
+    if (NEW(Counter) != NULL)                     return 30;
+    if (CALL0(with_target, start_detached))       return 31;
+    if (thread_new_fn(return_arg, NULL) != NULL)  return 32;
+    if (CALL2(AS(Stream, ms), write, "0123456789", 10) != -1) return 33;
+    CALL2(ap, add_flag, "late", "never stored");
+    if (fopen_str(TMP_A, "r") != NULL)            return 34;
+    {
+        static char big[2048];
+        memset(big, 'x', sizeof(big) - 1);
+        if (CALL1(AS(Stream, ms), fprintln, big) != -1) return 35;
+    }
+
+    if (!oom_free_one(&held, fr_usable))          return 40;
+    if (thread_new_fn(return_arg, NULL) != NULL)  return 41;
+
+    oom_end(held);
+    REMOVE(ap);
+    REMOVE(ms);
+    REMOVE(with_target);
+    return 0;
+}
+
+static bool test_xxc_out_of_memory(void)
+{
+    tmp_cleanup();
+    int st = run_in_child_quiet(child_xxc_out_of_memory, NULL);
+    if (st != 0)
+        printf("  oom child status %d\n", st);
+    tmp_cleanup();
+    ASSERT(st == 0);
+    return true;
+}
+
+static void run_xxc_tests(void)
+{
+
+    RUN_TEST(test_class_runtime);
+    RUN_TEST(test_stream_base_class);
+    RUN_TEST(test_stream_print_helpers);
+    RUN_TEST(test_memstream_edge_cases);
+    RUN_TEST(test_memstream_gap_reads_as_zero);
+    RUN_TEST(test_freadline_memstream);
+#if defined(__linux__) || defined(__FreeBSD__)
+    RUN_TEST(test_filestream_modes);
+    RUN_TEST(test_filestream_open_errors);
+    RUN_TEST(test_filestream_unowned_and_invalid);
+#endif
+#if defined(__linux__)
+    RUN_TEST(test_cin_reads_stdin);
+#endif
+    RUN_TEST(test_fspath_components);
+#if defined(__linux__) || defined(__FreeBSD__)
+    RUN_TEST(test_fspath_absolute);
+    RUN_TEST(test_fspath_touch_remove);
+#endif
+    RUN_TEST(test_map_byte_keys);
+    RUN_TEST(test_runnable_and_thread_guards);
+    RUN_TEST(test_argparser);
+    RUN_TEST(test_application);
+#if defined(__linux__)
+    RUN_TEST(test_xxc_out_of_memory);
+#endif
+}

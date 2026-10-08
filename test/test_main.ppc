@@ -1,0 +1,2201 @@
+// ++C Runtime Library
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <def.h>
+#include <cio.h>
+#include <str.h>
+#include <dstr.h>
+#include <iarr.h>
+#include <parr.h>
+#include <class.pph>
+#include <mems.pph>
+#include <fs.pph>
+#include <mem.h>
+#include <alloc.h>
+#include <atomic.h>
+#include <thread.h>
+#include <clock.h>
+#include <mutex.h>
+#include <cond.h>
+#include <sem.h>
+#include <map.h>
+#include <map.pph>
+#include <runnable.pph>
+#include <thread.pph>
+#include "test.h"
+
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <xxc_sys.h>
+#endif
+
+typedef struct { u64 s; } rng_t;
+static inline u64 rnd(rng_t *r)
+{
+    u64 x = r->s;
+    x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+    return r->s = x;
+}
+
+CLASS(Animal)
+{
+    METHOD(const char*, speak, (void *self))
+};
+CLASS_EXPORT(Animal);
+const char* METHOD_DECL(Animal, speak)(void *self);
+CLASS_INFO_ROOT(Animal);
+
+CONSTRUCTOR(Animal)
+{
+    METHOD_LINK(Animal, speak);
+}
+DECONSTRUCTOR(Animal) {}
+
+IMPLEMENT(Animal, const char*, speak, (void *self))
+{
+    (void)self;
+    return "...";
+}
+
+CLASS(Dog, Animal)
+{
+    BASE(Animal)
+};
+CLASS_EXPORT(Dog);
+const char* METHOD_DECL(Dog, speak)(void *self);
+CLASS_INFO(Dog, Animal);
+
+CONSTRUCTOR(Dog)
+{
+    SUPER_CTOR(self, Animal);
+    METHOD_LINK(base, Dog, speak); 
+}
+DECONSTRUCTOR(Dog)
+{
+    SUPER_DTOR(self, Animal);
+}
+
+IMPLEMENT(Dog, const char*, speak, (void *self)) 
+{
+    (void)self;
+    return "Woof!";
+}
+
+static bool test_dstr(void)
+{
+    dstr_t s = dstr_new("Hello");
+    ASSERT(s.len == 5);
+    
+    dstr_append(&s, " World");
+    ASSERT_STR_EQ(s.data, "Hello World");
+    ASSERT(s.len == 11);
+    
+    dstr_append_int(&s, 42);
+    ASSERT_STR_EQ(s.data, "Hello World42");
+    
+    dstr_free(&s);
+    ASSERT(s.data == NULL);
+    return true;
+}
+
+static bool test_iarr(void)
+{
+    iarr_t arr = iarr_new(NULL, 0);
+    
+    for (int i = 0; i < 100; i++)
+        iarr_append_val(&arr, i);
+    
+    ASSERT(arr.len == 100);
+    ASSERT(arr.cap >= 100);
+    ASSERT(arr.data[50] == 50);
+    ASSERT(arr.data[99] == 99);
+    
+    iarr_free(&arr);
+    ASSERT(arr.data == NULL);
+    return true;
+}
+
+static bool test_parr(void)
+{
+    parr_t arr = parr_new(NULL, 0);
+    
+    char* a = "Item A";
+    char* b = "Item B";
+    
+    parr_append_val(&arr, a);
+    parr_append_val(&arr, b);
+    
+    ASSERT(arr.len == 2);
+    ASSERT_STR_EQ((const char*)arr.data[0], "Item A");
+    ASSERT_STR_EQ((const char*)arr.data[1], "Item B");
+    
+    parr_free(&arr);
+    return true;
+}
+
+static bool test_formatting(void)
+{
+    char buf[128];
+    
+    snprintf(buf, sizeof(buf), "%d %x", 255, 255);
+    ASSERT_STR_EQ(buf, "255 ff");
+    
+    snprintf(buf, sizeof(buf), "[%s] %p", "test", (void*)0xDEADBEEF);
+    ASSERT(buf[0] == '[' && buf[1] == 't' && buf[2] == 'e'); 
+
+    snprintf(buf, sizeof(buf), "%04d", 42);
+    ASSERT_STR_EQ(buf, "0042");
+
+    return true;
+}
+
+static bool test_oop_system(void)
+{
+    Dog *dog = NEW(Dog);
+    ASSERT(dog != NULL);
+    
+    Animal *animal = AS(Animal, dog);
+    ASSERT(animal != NULL);
+    
+    const char* sound = CALL0(animal, speak);
+    ASSERT_STR_EQ(sound, "Woof!");
+    
+    Stream *invalid = AS(Stream, dog);
+    ASSERT(invalid == NULL);
+    
+    REMOVE(dog);
+    return true;
+}
+
+static bool test_memory_stream(void)
+{
+    MemoryStream *ms = NEW(MemoryStream);
+    Stream *stream = AS(Stream, ms);
+    
+    const char *msg = "++C Stream Data";
+    i64 written = CALL2(stream, write, msg, strlen(msg));
+    ASSERT(written == (i64)strlen(msg));
+    
+    CALL2(stream, seek, 0, FS_SEEK_SET);
+    
+    char buf[32] = {0};
+    i64 read_bytes = CALL2(stream, read, buf, 3);
+    ASSERT(read_bytes == 3);
+    ASSERT_STR_EQ(buf, "++C");
+    
+    CALL2(stream, seek, 0, FS_SEEK_END);
+    char dummy;
+    CALL2(stream, read, &dummy, 1);
+    ASSERT(CALL0(stream, eof) == 1);
+    
+    REMOVE(ms);
+    return true;
+}
+
+static bool test_fspath(void)
+{
+    dstr_t initial = dstr_new("usr");
+    FSPath *p = fs_path(initial);
+    dstr_free(&initial);
+    
+    CALL1(p, join, "local/bin/app");
+    
+    FSPath *b = CALL0(p, base);
+    dstr_t b_str = CALL0(b, data);
+    ASSERT_STR_EQ(b_str.data, "app");
+    dstr_free(&b_str);
+    
+    REMOVE(b);
+    REMOVE(p);
+    return true;
+}
+
+bool test_printf_floats()
+{
+    char buf[256];
+
+    snprintf(buf, sizeof(buf), "[%f]", 3.14159);      ASSERT_STR_EQ(buf, "[3.141590]");
+    snprintf(buf, sizeof(buf), "[%.2f]", 3.14159);    ASSERT_STR_EQ(buf, "[3.14]");
+    snprintf(buf, sizeof(buf), "[%10.2f]", 3.14159);  ASSERT_STR_EQ(buf, "[      3.14]");
+    snprintf(buf, sizeof(buf), "[%-10.2f]", 3.14159); ASSERT_STR_EQ(buf, "[3.14      ]");
+    snprintf(buf, sizeof(buf), "[%010.2f]", 3.14159); ASSERT_STR_EQ(buf, "[0000003.14]");
+    snprintf(buf, sizeof(buf), "[%f]", -3.14159);     ASSERT_STR_EQ(buf, "[-3.141590]");
+    snprintf(buf, sizeof(buf), "[%f]", 0.0);          ASSERT_STR_EQ(buf, "[0.000000]");
+    
+    snprintf(buf, sizeof(buf), "[%f]", 0.9999995);    ASSERT_STR_EQ(buf, "[1.000000]");
+    snprintf(buf, sizeof(buf), "[%.0f]", 0.5);        ASSERT_STR_EQ(buf, "[0]"); 
+    snprintf(buf, sizeof(buf), "[%.0f]", 1.5);        ASSERT_STR_EQ(buf, "[2]");
+    snprintf(buf, sizeof(buf), "[%.3f]", 9.9996);     ASSERT_STR_EQ(buf, "[10.000]");
+    snprintf(buf, sizeof(buf), "[%.2f]", 99.995);     ASSERT_STR_EQ(buf, "[100.00]");
+    
+    snprintf(buf, sizeof(buf), "[%e]", 12345.6789);   ASSERT_STR_EQ(buf, "[1.234568e+04]");
+    snprintf(buf, sizeof(buf), "[%.2e]", 12345.6789); ASSERT_STR_EQ(buf, "[1.23e+04]");
+    snprintf(buf, sizeof(buf), "[%g]", 0.0001234);    ASSERT_STR_EQ(buf, "[0.0001234]");
+    snprintf(buf, sizeof(buf), "[%g]", 123456.0);     ASSERT_STR_EQ(buf, "[123456]");
+    snprintf(buf, sizeof(buf), "[%g]", 100.0);        ASSERT_STR_EQ(buf, "[100]");
+
+    return true;
+}
+
+bool test_printf_ints()
+{
+    char buf[256];
+
+    snprintf(buf, sizeof(buf), "[%d]", -42);         ASSERT_STR_EQ(buf, "[-42]");
+    snprintf(buf, sizeof(buf), "[%5d]", -42);        ASSERT_STR_EQ(buf, "[  -42]");
+    snprintf(buf, sizeof(buf), "[%-5d]", -42);       ASSERT_STR_EQ(buf, "[-42  ]");
+    snprintf(buf, sizeof(buf), "[%05d]", -42);       ASSERT_STR_EQ(buf, "[-0042]");
+    
+    snprintf(buf, sizeof(buf), "[%x]", 255);         ASSERT_STR_EQ(buf, "[ff]");
+    snprintf(buf, sizeof(buf), "[%#x]", 255);        ASSERT_STR_EQ(buf, "[0xff]");
+    snprintf(buf, sizeof(buf), "[%o]", 8);           ASSERT_STR_EQ(buf, "[10]");
+    snprintf(buf, sizeof(buf), "[%#o]", 8);          ASSERT_STR_EQ(buf, "[010]");
+    
+    snprintf(buf, sizeof(buf), "[%lld]", -123456789012LL);    ASSERT_STR_EQ(buf, "[-123456789012]");
+    snprintf(buf, sizeof(buf), "[%lld]", -123456789012345LL); ASSERT_STR_EQ(buf, "[-123456789012345]");
+    snprintf(buf, sizeof(buf), "[%zu]", (size_t)42);          ASSERT_STR_EQ(buf, "[42]");
+    
+    snprintf(buf, sizeof(buf), "[%.5d]", 42); ASSERT_STR_EQ(buf, "[00042]");
+    snprintf(buf, sizeof(buf), "[%.0d]", 0);  ASSERT_STR_EQ(buf, "[]");
+
+    return true;
+}
+
+bool test_printf_strings()
+{
+    char buf[256];
+
+    snprintf(buf, sizeof(buf), "[%10s]", "hi");      ASSERT_STR_EQ(buf, "[        hi]");
+    snprintf(buf, sizeof(buf), "[%-10s]", "hi");     ASSERT_STR_EQ(buf, "[hi        ]");
+    snprintf(buf, sizeof(buf), "[%.2s]", "hello");   ASSERT_STR_EQ(buf, "[he]");
+
+    return true;
+}
+
+bool test_snprintf_truncation()
+{
+    char smallc[4];
+
+    int n = snprintf(smallc, sizeof(smallc), "hello world");
+    
+    ASSERT_STR_EQ(smallc, "hel");
+    ASSERT(n == 11);
+
+    return true;
+}
+
+bool test_dstr_edge_cases()
+{
+    dstr_t s = dstr_new("");
+    ASSERT(s.len == 0);
+    
+    dstr_append(&s, "abc");
+    ASSERT_STR_EQ(s.data, "abc");
+    ASSERT(s.len == 3);
+    
+    dstr_free(&s);
+    return true;
+}
+
+static __thread int  t_counter = 42;          
+static __thread char t_buf[100] = { 1, 2, 3 };
+static __thread long t_zero;                  
+static __thread _Alignas(64) char t_aligned[64];
+
+static bool test_tls_main_thread(void)
+{
+    ASSERT(t_counter == 42);
+    ASSERT(t_buf[0] == 1 && t_buf[2] == 3 && t_buf[3] == 0 && t_buf[99] == 0);
+    ASSERT(t_zero == 0);
+    ASSERT(((uintptr_t)t_aligned & 63) == 0);
+    t_counter++;
+    t_zero = 7;
+    ASSERT(t_counter == 43 && t_zero == 7);
+    return true;
+}
+
+static void wait_until(atomic_i32_t *v, i32 want, u32 timeout_ms)
+{
+    u64 start = clock_monotonic_ms();
+    while (atomic_i32_load(v) != want && clock_monotonic_ms() - start < timeout_ms)
+        thread_sleep_ms(1);
+}
+
+static void *ret_arg_plus_one(void *arg)
+{
+    return (void *)((uintptr_t)arg + 1);
+}
+
+static bool test_thread_create_join(void)
+{
+    thread_t t;
+    ASSERT(thread_create(&t, ret_arg_plus_one, (void *)(uintptr_t)41, NULL) == THREAD_SUCCESS);
+    ASSERT(t != NULL);
+    void *rv = NULL;
+    ASSERT(thread_join(t, &rv) == THREAD_SUCCESS);
+    ASSERT((uintptr_t)rv == 42);
+    return true;
+}
+
+static void *report_ids(void *arg)
+{
+    u32 *out = (u32 *)arg;
+    out[0] = thread_current_id();
+    out[1] = thread_id(thread_self());
+#if defined(__linux__) || defined(__FreeBSD__)
+    out[2] = (u32)sys_gettid();
+#else
+    out[2] = out[0];
+#endif
+    return NULL;
+}
+
+static bool test_thread_identity(void)
+{
+    u32 ids[3] = { 0, 0, 0 };
+    thread_t t;
+    ASSERT(thread_create(&t, report_ids, ids, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(ids[0] != 0 && ids[0] == ids[1] && ids[0] == ids[2]);
+    ASSERT(ids[0] != thread_current_id());          
+    ASSERT(thread_self() != NULL);
+    ASSERT(thread_equal(thread_self(), thread_self()));
+    ASSERT(thread_join(thread_self(), NULL) == THREAD_DEADLK);
+    ASSERT(thread_join(NULL, NULL) == THREAD_INVAL);
+    ASSERT(thread_create(NULL, ret_arg_plus_one, NULL, NULL) == THREAD_INVAL);
+    return true;
+}
+
+typedef struct { int ok; int seen_counter; } tls_report_t;
+
+static void *tls_child(void *arg)
+{
+    tls_report_t *r = (tls_report_t *)arg;
+    r->seen_counter = t_counter;                    
+    int ok = (t_buf[2] == 3 && t_buf[50] == 0 && t_zero == 0 && ((uintptr_t)t_aligned & 63) == 0);
+    t_counter = 1000; t_zero = 99;                  
+    t_buf[2] = 77;
+    r->ok = ok && t_counter == 1000;
+    return NULL;
+}
+
+static bool test_tls_isolation(void)
+{
+    t_counter = 43; t_zero = 7; t_buf[2] = 3;
+    tls_report_t r[4] = {{0,0},{0,0},{0,0},{0,0}};
+    thread_t t[4];
+    for (int i = 0; i < 4; i++) ASSERT(thread_create(&t[i], tls_child, &r[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < 4; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < 4; i++) { ASSERT(r[i].ok); ASSERT(r[i].seen_counter == 42); }
+    ASSERT(t_counter == 43 && t_zero == 7 && t_buf[2] == 3);
+    return true;
+}
+
+static atomic_i32_t g_counter = ATOMIC_INIT(0);
+
+static void *counter_worker(void *arg)
+{
+    int n = (int)(uintptr_t)arg;
+    for (int i = 0; i < n; i++)
+    {
+        atomic_i32_fetch_add(&g_counter, 1);
+        if ((i & 255) == 0) thread_yield();
+    }
+    return NULL;
+}
+
+static bool test_many_threads_atomic_counter(void)
+{
+    enum { N = 32, ITER = 5000 };
+    thread_t t[N];
+    atomic_i32_store(&g_counter, 0);
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], counter_worker, (void *)(uintptr_t)ITER, NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    ASSERT(atomic_i32_load(&g_counter) == N * ITER);
+    return true;
+}
+
+static int deep(int n, volatile char *sink)
+{
+    volatile char pad[256];
+    pad[0] = (char)n;
+    sink[0] = pad[0];
+    if (n == 0) return 0;
+    return 1 + deep(n - 1, sink);
+}
+
+static void *deep_worker(void *arg)
+{
+    volatile char sink[4];
+    return (void *)(uintptr_t)deep((int)(uintptr_t)arg, sink);
+}
+
+static bool test_thread_stack_sizes(void)
+{
+    thread_t t;
+    void *rv;
+    
+    ASSERT(thread_create(&t, deep_worker, (void *)(uintptr_t)1000, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, &rv) == THREAD_SUCCESS && (uintptr_t)rv == 1000);
+
+    
+    thread_attr_t big = THREAD_ATTR_INIT;
+    big.stack_size = 8u * 1024 * 1024;
+    ASSERT(thread_create(&t, deep_worker, (void *)(uintptr_t)20000, &big) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, &rv) == THREAD_SUCCESS && (uintptr_t)rv == 20000);
+
+    
+    thread_attr_t tiny = THREAD_ATTR_INIT;
+    tiny.stack_size = 1;
+    ASSERT(thread_create(&t, ret_arg_plus_one, (void *)(uintptr_t)1, &tiny) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, &rv) == THREAD_SUCCESS && (uintptr_t)rv == 2);
+    return true;
+}
+
+static atomic_i32_t g_detached_done = ATOMIC_INIT(0);
+
+static void *detached_worker(void *arg)
+{
+    (void)arg;
+    thread_sleep_ms(5);
+    atomic_i32_fetch_add(&g_detached_done, 1);
+    return NULL;
+}
+
+static bool test_thread_detach(void)
+{
+    atomic_i32_store(&g_detached_done, 0);
+
+    
+    thread_t t;
+    ASSERT(thread_create(&t, detached_worker, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_detach(t) == THREAD_SUCCESS);
+    wait_until(&g_detached_done, 1, 2000);
+    ASSERT(atomic_i32_load(&g_detached_done) == 1);
+
+    
+    thread_attr_t da = THREAD_ATTR_INIT;
+    da.detached = true;
+    thread_t none = (thread_t)1;
+    ASSERT(thread_create(&none, detached_worker, NULL, &da) == THREAD_SUCCESS);
+    ASSERT(none == NULL);
+    wait_until(&g_detached_done, 2, 2000);
+    ASSERT(atomic_i32_load(&g_detached_done) == 2);
+
+    
+    ASSERT(thread_create(&t, ret_arg_plus_one, NULL, NULL) == THREAD_SUCCESS);
+    thread_sleep_ms(20);
+    ASSERT(thread_detach(t) == THREAD_SUCCESS);
+
+    
+    ASSERT(thread_create(&t, detached_worker, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_detach(t) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, NULL) == THREAD_INVAL);
+    wait_until(&g_detached_done, 3, 2000);
+    thread_sleep_ms(10);
+    return true;
+}
+
+#if defined(__linux__)
+
+static long map_count(void)
+{
+    long fd = sys_openat(AT_FDCWD, "/proc/self/maps", O_RDONLY, 0);
+    if (fd < 0) return -1;
+    char buf[4096];
+    long lines = 0, n;
+    while ((n = sys_read((int)fd, buf, sizeof(buf))) > 0)
+        for (long i = 0; i < n; i++)
+            if (buf[i] == '\n') lines++;
+    sys_close((int)fd);
+    return lines;
+}
+
+static void *noop_worker(void *arg) { (void)arg; return NULL; }
+
+static bool test_thread_no_mapping_leak(void)
+{
+    thread_t t;
+    
+    for (int i = 0; i < 8; i++) { ASSERT(thread_create(&t, noop_worker, NULL, NULL) == THREAD_SUCCESS); thread_join(t, NULL); }
+    long before = map_count();
+    ASSERT(before > 0);
+
+    for (int i = 0; i < 1500; i++)
+    {
+        ASSERT(thread_create(&t, noop_worker, NULL, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    }
+
+    atomic_i32_store(&g_detached_done, 0);
+    thread_attr_t da = THREAD_ATTR_INIT;
+    da.detached = true;
+    int started = 0;
+    for (int i = 0; i < 1500; i++)
+    {
+        thread_t none;
+        if (thread_create(&none, detached_worker, NULL, &da) == THREAD_SUCCESS) started++;
+        else thread_sleep_ms(2);           
+        if ((i & 63) == 63) wait_until(&g_detached_done, started, 2000); 
+    }
+    wait_until(&g_detached_done, started, 5000);
+    ASSERT(started > 1000);
+    thread_sleep_ms(50);                   
+
+    long after = map_count();
+    ASSERT(after > 0);
+    printf("  (mappings: %ld -> %ld)\n", before, after);
+    ASSERT(after - before < 32);
+    return true;
+}
+#endif
+
+static atomic_i32_t g_dtor_calls = ATOMIC_INIT(0);
+static atomic_i32_t g_dtor_sum = ATOMIC_INIT(0);
+
+static void key_dtor(void *v)
+{
+    atomic_i32_fetch_add(&g_dtor_calls, 1);
+    atomic_i32_fetch_add(&g_dtor_sum, (i32)(uintptr_t)v);
+}
+
+static tls_key_t g_key;
+
+static void *key_worker(void *arg)
+{
+    if (tls_get(g_key) != NULL) return (void *)1;          
+    tls_set(g_key, arg);
+    if (tls_get(g_key) != arg) return (void *)2;
+    return NULL;                                           
+}
+
+static bool test_tls_keys(void)
+{
+    atomic_i32_store(&g_dtor_calls, 0);
+    atomic_i32_store(&g_dtor_sum, 0);
+    ASSERT(tls_key_create(&g_key, key_dtor) == THREAD_SUCCESS);
+    ASSERT(tls_get(g_key) == NULL);
+    ASSERT(tls_set(g_key, (void *)(uintptr_t)5) == THREAD_SUCCESS);
+    ASSERT((uintptr_t)tls_get(g_key) == 5);
+
+    thread_t t[3];
+    for (int i = 0; i < 3; i++) ASSERT(thread_create(&t[i], key_worker, (void *)(uintptr_t)(10 * (i + 1)), NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < 3; i++) { void *rv = (void *)9; ASSERT(thread_join(t[i], &rv) == THREAD_SUCCESS); ASSERT(rv == NULL); }
+    ASSERT(atomic_i32_load(&g_dtor_calls) == 3);
+    ASSERT(atomic_i32_load(&g_dtor_sum) == 60);
+    ASSERT((uintptr_t)tls_get(g_key) == 5);                
+
+    
+    ASSERT(tls_key_delete(g_key) == THREAD_SUCCESS);
+    ASSERT(tls_key_delete(g_key) == THREAD_INVAL);
+    tls_key_t k2;
+    ASSERT(tls_key_create(&k2, NULL) == THREAD_SUCCESS);
+    ASSERT(tls_get(k2) == NULL);
+    ASSERT(tls_key_delete(k2) == THREAD_SUCCESS);
+    ASSERT(tls_set(g_key, NULL) == THREAD_INVAL);
+    return true;
+}
+
+typedef struct { size_t size; u64 seed; } blk_hdr;
+#define BLK_MIN 16
+
+static inline u8 pat(u64 seed, size_t i) { return (u8)(seed + i * 131u + (i >> 8)); }
+
+static void blk_fill(u8 *p, size_t from, size_t to, u64 seed)
+{
+    for (size_t i = from; i < to; i++) p[i] = pat(seed, i);
+}
+
+static bool blk_verify(const u8 *p, size_t size, u64 seed)
+{
+    for (size_t i = sizeof(blk_hdr); i < size; i++)
+        if (p[i] != pat(seed, i)) return false;
+    return true;
+}
+
+static void *blk_new(size_t size, u64 seed)
+{
+    if (size < BLK_MIN) size = BLK_MIN;
+    u8 *p = (u8 *)malloc(size);
+    if (!p) return NULL;
+    blk_hdr *h = (blk_hdr *)p;
+    h->size = size;
+    h->seed = seed;
+    blk_fill(p, sizeof(blk_hdr), size, seed);
+    return p;
+}
+
+static bool blk_free(void *q)
+{
+    u8 *p = (u8 *)q;
+    blk_hdr h = *(blk_hdr *)p;
+    bool ok = h.size >= BLK_MIN && blk_verify(p, h.size, h.seed);
+    free(p);
+    return ok;
+}
+
+static void *blk_resize(void *q, size_t newsize, u64 newseed, bool *ok)
+{
+    if (newsize < BLK_MIN) newsize = BLK_MIN;
+    u8 *p = (u8 *)q;
+    blk_hdr old = *(blk_hdr *)p;
+
+    if (old.size < BLK_MIN || !blk_verify(p, old.size, old.seed)) 
+    { 
+        *ok = false; 
+        return NULL; 
+    }
+
+    u8 *n = (u8 *)realloc(p, newsize);
+    if (!n) { 
+        *ok = true; 
+        return p; 
+    }            
+
+    size_t keep = old.size < newsize ? old.size : newsize;
+    blk_hdr *hn = (blk_hdr *)n;
+    if (hn->size != old.size || hn->seed != old.seed || 
+        !blk_verify(n, keep, old.seed)
+    )
+    { 
+        *ok = false; 
+        return NULL; 
+    }
+    hn->size = newsize;
+    hn->seed = newseed;
+    blk_fill(n, sizeof(blk_hdr), newsize, newseed);   
+    *ok = true;
+    return n;
+}
+
+static size_t rnd_size(rng_t *r)
+{
+    u64 v = rnd(r);
+    unsigned k = (unsigned)(v % 100);
+    v >>= 8;
+    if (k < 60) return 1 + (size_t)(v % 256);
+    if (k < 92) return 1 + (size_t)(v % 8192);
+    if (k < 99) return 8193 + (size_t)(v % 60000);
+    return 65536 + (size_t)(v % 300000);
+}
+
+#if defined(__linux__)
+static long rss_pages(void)
+{
+    long fd = sys_openat(AT_FDCWD, "/proc/self/statm", O_RDONLY, 0);
+    if (fd < 0) return -1;
+    char buf[128];
+    long n = sys_read((int)fd, buf, sizeof(buf) - 1);
+    sys_close((int)fd);
+    if (n <= 0) return -1;
+    buf[n] = 0;
+    char *p = buf;
+    while (*p >= '0' && *p <= '9') p++;   
+    while (*p == ' ') p++;
+    long v = 0;
+    for (; *p >= '0' && *p <= '9'; p++) v = v * 10 + (*p - '0');
+    return v;
+}
+#define RSS_CHECKS_MEANINGFUL (!defined(__aarch64__))   
+#endif
+
+static bool test_alloc_basics(void)
+{
+    ASSERT(malloc(0) != NULL);                     
+    void *a = malloc(0), *b = malloc(0);
+    ASSERT(a && b && a != b);
+    free(a); free(b);
+    free(NULL);                                    
+
+    ASSERT(malloc((size_t)-1) == NULL);
+    ASSERT(malloc((size_t)-1 / 2) == NULL);
+    ASSERT(calloc((size_t)-1, 2) == NULL);         
+    ASSERT(calloc(1u << 31, 1u << 31) == NULL);
+
+    
+    for (size_t sz = 1; sz <= 20000; sz += (sz < 300 ? 1 : 37))
+    {
+        u8 *p = (u8 *)malloc(sz);
+        ASSERT(p != NULL);
+        ASSERT(((uintptr_t)p & 15) == 0);
+        size_t us = malloc_usable_size(p);
+        ASSERT(us >= sz);
+        if (sz > 128 && sz <= 8192) ASSERT(us <= sz + sz / 4 + 16);     
+        p[0] = 1; p[sz - 1] = 2;                    
+        memset(p, 0x5A, us);                        
+        free(p);
+    }
+    ASSERT(malloc_usable_size(NULL) == 0);
+    return true;
+}
+
+static bool test_alloc_size_classes(void)
+{
+    
+    size_t prev = 0;
+    int distinct = 0;
+    size_t last = 0;
+    for (size_t sz = 1; sz <= 8192; sz++)
+    {
+        void *p = malloc(sz);
+        ASSERT(p);
+        size_t us = malloc_usable_size(p);
+        free(p);
+        ASSERT(us >= sz);
+        ASSERT(us >= prev);
+        if (us != last) { distinct++; last = us; }
+        prev = us;
+    }
+#if defined(__linux__) || defined(__FreeBSD__)
+    
+    
+    ASSERT(distinct == 32);
+    ASSERT(prev == 8192);
+#else
+    
+    (void)distinct;
+#endif
+    return true;
+}
+
+static bool test_alloc_no_overlap(void)
+{
+    enum { N = 3000 };
+    static void *ptrs[N];
+    rng_t r = { 0x1234567 };
+    for (int i = 0; i < N; i++)
+    {
+        ptrs[i] = blk_new(rnd_size(&r) % 5000 + 1, (u64)i * 7919 + 1);
+        ASSERT(ptrs[i]);
+    }
+    for (int i = 0; i < N; i++)                   
+    {
+        blk_hdr *h = (blk_hdr *)ptrs[i];
+        ASSERT(blk_verify((u8 *)ptrs[i], h->size, h->seed));
+    }
+    
+    for (int i = 0; i < N; i += 2) { ASSERT(blk_free(ptrs[i])); ptrs[i] = NULL; }
+    for (int i = 0; i < N; i += 2) { ptrs[i] = blk_new(rnd_size(&r) % 3000 + 1, (u64)i * 104729 + 3); ASSERT(ptrs[i]); }
+    for (int i = 0; i < N; i++) ASSERT(blk_free(ptrs[i]));
+    return true;
+}
+
+static bool test_alloc_calloc(void)
+{
+    
+    for (size_t sz = 1; sz <= 9000; sz += 7)
+    {
+        u8 *d = (u8 *)malloc(sz);
+        ASSERT(d);
+        memset(d, 0xAA, sz);
+        free(d);
+        u8 *z = (u8 *)calloc(1, sz);
+        ASSERT(z);
+        for (size_t i = 0; i < sz; i++) ASSERT(z[i] == 0);
+        free(z);
+    }
+    
+    for (int round = 0; round < 4; round++)
+    {
+        size_t sz = 200000 + (size_t)round * 1000;
+        u8 *d = (u8 *)malloc(sz);
+        ASSERT(d);
+        memset(d, 0xEE, sz);
+        free(d);
+        u8 *z = (u8 *)calloc(sz, 1);
+        ASSERT(z);
+        for (size_t i = 0; i < sz; i += 3) ASSERT(z[i] == 0);
+        ASSERT(z[sz - 1] == 0);
+        free(z);
+    }
+    u32 *arr = (u32 *)calloc(1000, sizeof(u32));    
+    ASSERT(arr);
+    for (int i = 0; i < 1000; i++) ASSERT(arr[i] == 0);
+    free(arr);
+    return true;
+}
+
+static bool test_alloc_realloc(void)
+{
+    
+    void *p = realloc(NULL, 100);
+    ASSERT(p);
+    ASSERT(realloc(p, 0) == NULL);
+
+    
+    bool ok = true;
+    u8 *q = (u8 *)blk_new(16, 1);
+    ASSERT(q);
+    size_t sizes[] = { 24, 100, 500, 4000, 8192, 8193, 30000, 100000, 700000, 2000000 };
+    for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++)
+    {
+        q = (u8 *)blk_resize(q, sizes[i], 100 + i, &ok);
+        ASSERT(ok && q);
+        ASSERT(malloc_usable_size(q) >= sizes[i]);
+    }
+    
+    for (int i = (int)(sizeof(sizes) / sizeof(sizes[0])) - 2; i >= 0; i--)
+    {
+        q = (u8 *)blk_resize(q, sizes[i] / 3 + 1, 200 + (u64)i, &ok);
+        ASSERT(ok && q);
+    }
+    ASSERT(blk_free(q));
+
+    
+    u8 *s = (u8 *)malloc(1000);
+    size_t us = malloc_usable_size(s);
+    ASSERT(realloc(s, us) == s);
+    ASSERT(realloc(s, us - 8) == s);                
+    free(s);
+
+    
+    u8 *t = (u8 *)blk_new(500, 9);
+    ASSERT(realloc(t, (size_t)-1) == NULL);
+    ASSERT(blk_free(t));
+    return true;
+}
+
+static bool test_alloc_large_objects(void)
+{
+    size_t sizes[] = { 8193, 65535, 65536, 100000, 1u << 20, 5u << 20 };
+    for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++)
+    {
+        for (int rep = 0; rep < 3; rep++)          
+        {
+            u8 *p = (u8 *)malloc(sizes[i]);
+            ASSERT(p);
+            ASSERT(((uintptr_t)p & 15) == 0);
+            p[0] = 1; p[sizes[i] - 1] = 2;
+            p[sizes[i] / 2] = 3;
+            ASSERT(p[0] == 1 && p[sizes[i] - 1] == 2 && p[sizes[i] / 2] == 3);
+            ASSERT(malloc_usable_size(p) >= sizes[i]);
+            free(p);
+        }
+    }
+    
+    void *v[8];
+    for (int i = 0; i < 8; i++) { v[i] = blk_new(100000 + (size_t)i * 50000, (u64)i + 5); ASSERT(v[i]); }
+    for (int i = 0; i < 8; i++) ASSERT(blk_free(v[i]));
+    return true;
+}
+
+static bool test_alloc_random_single_thread(void)
+{
+    enum { SLOTS = 600, OPS = 200000 };
+    static void *slots[SLOTS];
+    rng_t r = { 0xC0FFEEULL };
+    for (int i = 0; i < OPS; i++)
+    {
+        unsigned idx = (unsigned)(rnd(&r) % SLOTS);
+        u64 op = rnd(&r) % 8;
+        if (!slots[idx])
+        {
+            slots[idx] = blk_new(rnd_size(&r), rnd(&r));
+            ASSERT(slots[idx]);
+        }
+        else if (op < 2)
+        {
+            bool ok;
+            slots[idx] = blk_resize(slots[idx], rnd_size(&r), rnd(&r), &ok);
+            ASSERT(ok && slots[idx]);
+        }
+        else
+        {
+            ASSERT(blk_free(slots[idx]));
+            slots[idx] = NULL;
+        }
+    }
+    for (int i = 0; i < SLOTS; i++) if (slots[i]) ASSERT(blk_free(slots[i]));
+    return true;
+}
+
+static atomic_i32_t g_fail = ATOMIC_INIT(0);
+#define T_CHECK(c) do { if (!(c)) { atomic_i32_fetch_add(&g_fail, 1); return NULL; } } while (0)
+
+typedef struct { u64 seed; int ops; } worker_arg_t;
+
+static void *random_worker(void *p)
+{
+    worker_arg_t *a = (worker_arg_t *)p;
+    enum { SLOTS = 400 };
+    void *slots[SLOTS];
+    for (int i = 0; i < SLOTS; i++) slots[i] = NULL;
+    rng_t r = { a->seed };
+    for (int i = 0; i < a->ops; i++)
+    {
+        unsigned idx = (unsigned)(rnd(&r) % SLOTS);
+        if (!slots[idx])
+        { 
+            slots[idx] = blk_new(rnd_size(&r), rnd(&r)); 
+            T_CHECK(slots[idx]); 
+        }
+        else if ((rnd(&r) & 7) < 2)
+        {
+            bool ok;
+            slots[idx] = blk_resize(slots[idx], rnd_size(&r), rnd(&r), &ok);
+            T_CHECK(ok && slots[idx]);
+        }
+        else { T_CHECK(blk_free(slots[idx])); slots[idx] = NULL; }
+        if ((i & 1023) == 0) thread_yield();
+    }
+    for (int i = 0; i < SLOTS; i++) if (slots[i]) T_CHECK(blk_free(slots[i]));
+    return NULL;
+}
+
+static bool test_alloc_threads_independent(void)
+{
+    enum { T = 8 };
+    thread_t t[T];
+    worker_arg_t a[T];
+    atomic_i32_store(&g_fail, 0);
+    for (int i = 0; i < T; i++) { a[i].seed = 0x9E3779B97F4A7C15ull * (u64)(i + 1); a[i].ops = 60000; ASSERT(thread_create(&t[i], random_worker, &a[i], NULL) == THREAD_SUCCESS); }
+    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    ASSERT(atomic_i32_load(&g_fail) == 0);
+    return true;
+}
+
+#define RING_CAP 512
+typedef struct {
+    atomic_ptr_t slot[RING_CAP];
+    _Alignas(64) atomic_size_t head;   
+    _Alignas(64) atomic_size_t tail;   
+} ring_t;
+
+static bool ring_push(ring_t *q, void *p)
+{
+    size_t t = atomic_size_load_explicit(&q->tail, ATOMIC_RELAXED);
+    size_t h = atomic_size_load_explicit(&q->head, ATOMIC_ACQUIRE);
+    if (t - h >= RING_CAP) return false;
+    atomic_ptr_store_explicit(&q->slot[t % RING_CAP], p, ATOMIC_RELAXED);
+    atomic_size_store_explicit(&q->tail, t + 1, ATOMIC_RELEASE);
+    return true;
+}
+
+static void *ring_pop(ring_t *q)
+{
+    size_t h = atomic_size_load_explicit(&q->head, ATOMIC_RELAXED);
+    size_t t = atomic_size_load_explicit(&q->tail, ATOMIC_ACQUIRE);
+    if (h == t) return NULL;
+    void *p = atomic_ptr_load_explicit(&q->slot[h % RING_CAP], ATOMIC_RELAXED);
+    atomic_size_store_explicit(&q->head, h + 1, ATOMIC_RELEASE);
+    return p;
+}
+
+typedef struct {
+    ring_t *in, *out;
+    int items;
+    u64 seed;
+} ring_arg_t;
+
+static void *ring_worker(void *p)
+{
+    ring_arg_t *a = (ring_arg_t *)p;
+    rng_t r = { a->seed };
+    int produced = 0, consumed = 0;
+    void *pending = NULL;
+    while (produced < a->items || consumed < a->items)
+    {
+        bool progressed = false;
+        if (produced < a->items)
+        {
+            if (!pending) { pending = blk_new(rnd_size(&r), rnd(&r)); T_CHECK(pending); }
+            if (ring_push(a->out, pending)) { pending = NULL; produced++; progressed = true; }
+        }
+        void *q = ring_pop(a->in);
+        if (q) { T_CHECK(blk_free(q)); consumed++; progressed = true; }   
+        if (!progressed) thread_yield();
+    }
+    return NULL;
+}
+
+static bool test_alloc_cross_thread_free(void)
+{
+    enum { T = 6 };
+    static ring_t rings[T];
+    thread_t t[T];
+    ring_arg_t a[T];
+    atomic_i32_store(&g_fail, 0);
+    for (int i = 0; i < T; i++)
+    {
+        for (int k = 0; k < RING_CAP; k++) atomic_ptr_init(&rings[i].slot[k], NULL);
+        atomic_size_init(&rings[i].head, 0);
+        atomic_size_init(&rings[i].tail, 0);
+    }
+    for (int i = 0; i < T; i++)
+    {
+        a[i].in = &rings[i];
+        a[i].out = &rings[(i + 1) % T];
+        a[i].items = 40000;
+        a[i].seed = 77 + (u64)i * 1000003;
+        ASSERT(thread_create(&t[i], ring_worker, &a[i], NULL) == THREAD_SUCCESS);
+    }
+    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    ASSERT(atomic_i32_load(&g_fail) == 0);
+    return true;
+}
+
+enum { CHURN_BLOCKS = 1500 };
+typedef struct { void *blocks[CHURN_BLOCKS]; u64 seed; } churn_arg_t;
+
+static void *churn_worker(void *p)
+{
+    churn_arg_t *a = (churn_arg_t *)p;
+    rng_t r = { a->seed };
+    for (int i = 0; i < CHURN_BLOCKS; i++)
+    {
+        size_t sz = rnd_size(&r);
+        if (sz > 20000) sz = 20000 + (sz % 1000);
+        a->blocks[i] = blk_new(sz, rnd(&r));
+        T_CHECK(a->blocks[i]);
+    }
+    for (int i = 0; i < CHURN_BLOCKS; i += 3)      
+    {
+        T_CHECK(blk_free(a->blocks[i]));
+        a->blocks[i] = NULL;
+    }
+    return NULL;                                   
+}
+
+static bool test_alloc_thread_churn(void)
+{
+    static churn_arg_t arg;
+    atomic_i32_store(&g_fail, 0);
+#if defined(__linux__)
+    long rss_start = 0, rss_end = 0;
+#endif
+    for (int round = 0; round < 300; round++)
+    {
+#if defined(__linux__)
+        if (round == 50) rss_start = rss_pages();
+#endif
+        thread_t t;
+        arg.seed = 1000 + (u64)round;
+        ASSERT(thread_create(&t, churn_worker, &arg, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+        
+        for (int i = 0; i < CHURN_BLOCKS; i++)
+            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = NULL; }
+    }
+    ASSERT(atomic_i32_load(&g_fail) == 0);
+#if defined(__linux__)
+    rss_end = rss_pages();
+    printf("  (rss pages after 50 rounds: %ld, after 300: %ld)\n", rss_start, rss_end);
+#if RSS_CHECKS_MEANINGFUL
+    
+    
+    ASSERT(rss_end - rss_start < 8192);            
+#endif
+#endif
+    return true;
+}
+
+static bool test_alloc_pages_recycled_across_threads(void)
+{  
+#if defined(__linux__)
+    long r0 = rss_pages();
+#endif
+    for (int round = 0; round < 40; round++)
+    {
+        static churn_arg_t arg;
+        thread_t t;
+        arg.seed = 5 + (u64)round;
+        ASSERT(thread_create(&t, churn_worker, &arg, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+        for (int i = 0; i < CHURN_BLOCKS; i++)
+            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = NULL; }
+    }
+#if defined(__linux__) && RSS_CHECKS_MEANINGFUL
+    long r1 = rss_pages();
+    ASSERT(r1 - r0 < 16384);                       
+#endif
+    return true;
+}
+
+#if defined(__linux__) && RSS_CHECKS_MEANINGFUL
+static bool test_alloc_returns_memory_to_os(void)
+{
+    enum { N = 30000 };                            
+    static void *v[N];
+    long base = rss_pages();
+    for (int i = 0; i < N; i++)
+    {
+        v[i] = malloc(8000);
+        ASSERT(v[i]);
+        *(volatile u8 *)v[i] = 1;                  
+        ((u8 *)v[i])[7999] = 1;
+    }
+    long peak = rss_pages();
+    for (int i = 0; i < N; i++) free(v[i]);
+    long after = rss_pages();
+    printf("  (rss pages: base %ld, peak %ld, after free %ld)\n", base, peak, after);
+    ASSERT(peak - base > 30000);                   
+    ASSERT(after - base < 8192);                   
+    return true;
+}
+#endif
+
+typedef struct { mutex_t m; cond_t c; bool ready; bool got_it; } signal_ctx_t;
+
+static void *cv_waiter(void *p)
+{
+    signal_ctx_t *ctx = (signal_ctx_t *)p;
+    mutex_lock(&ctx->m);
+    while (!ctx->ready)
+        cond_wait(&ctx->c, &ctx->m);
+    ctx->got_it = true;
+    mutex_unlock(&ctx->m);
+    return NULL;
+}
+
+static bool test_cond_signal_wakes_waiter(void)
+{
+    signal_ctx_t ctx;
+    mutex_init(&ctx.m, MUTEX_PLAIN);
+    cond_init(&ctx.c);
+    ctx.ready = false;
+    ctx.got_it = false;
+
+    thread_t t;
+    ASSERT(thread_create(&t, cv_waiter, &ctx, NULL) == THREAD_SUCCESS);
+    thread_sleep_ms(20);              
+
+    mutex_lock(&ctx.m);
+    ctx.ready = true;
+    cond_signal(&ctx.c);
+    mutex_unlock(&ctx.m);
+
+    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(ctx.got_it);
+    mutex_destroy(&ctx.m);
+    cond_destroy(&ctx.c);
+    return true;
+}
+
+typedef struct { mutex_t m; cond_t c; bool go; atomic_i32_t woke; } bcast_ctx_t;
+
+static void *bcast_waiter(void *p)
+{
+    bcast_ctx_t *ctx = (bcast_ctx_t *)p;
+    mutex_lock(&ctx->m);
+    while (!ctx->go)
+        cond_wait(&ctx->c, &ctx->m);
+    mutex_unlock(&ctx->m);
+    atomic_i32_fetch_add(&ctx->woke, 1);
+    return NULL;
+}
+
+static bool test_cond_broadcast_wakes_all(void)
+{
+    enum { N = 12 };
+    bcast_ctx_t ctx;
+    mutex_init(&ctx.m, MUTEX_PLAIN);
+    cond_init(&ctx.c);
+    ctx.go = false;
+    atomic_i32_store(&ctx.woke, 0);
+
+    thread_t t[N];
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], bcast_waiter, &ctx, NULL) == THREAD_SUCCESS);
+    thread_sleep_ms(30);
+
+    mutex_lock(&ctx.m);
+    ctx.go = true;
+    cond_broadcast(&ctx.c);
+    mutex_unlock(&ctx.m);
+
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    ASSERT(atomic_i32_load(&ctx.woke) == N);
+    mutex_destroy(&ctx.m);
+    cond_destroy(&ctx.c);
+    return true;
+}
+
+static bool test_cond_timedwait_times_out(void)
+{
+    mutex_t m = MUTEX_INIT;
+    cond_t c;
+    cond_init(&c);
+    mutex_lock(&m);
+    u64 t0 = clock_monotonic_ms();
+    int rc = cond_timedwait_ms(&c, &m, 60);
+    u64 elapsed = clock_monotonic_ms() - t0;
+    mutex_unlock(&m);
+
+    ASSERT(rc == COND_TIMEDOUT);
+    ASSERT(elapsed >= 50);             
+    ASSERT(mutex_trylock(&m) == MUTEX_SUCCESS);   
+    mutex_unlock(&m);
+    mutex_destroy(&m);
+    cond_destroy(&c);
+    return true;
+}
+
+static void *late_signaller(void *p)
+{
+    signal_ctx_t *ctx = (signal_ctx_t *)p;
+    thread_sleep_ms(15);
+    mutex_lock(&ctx->m);
+    ctx->ready = true;
+    cond_signal(&ctx->c);
+    mutex_unlock(&ctx->m);
+    return NULL;
+}
+
+static bool test_cond_timedwait_succeeds_before_deadline(void)
+{
+    signal_ctx_t ctx;
+    mutex_init(&ctx.m, MUTEX_PLAIN);
+    cond_init(&ctx.c);
+    ctx.ready = false;
+
+    thread_t t;
+    ASSERT(thread_create(&t, late_signaller, &ctx, NULL) == THREAD_SUCCESS);
+
+    mutex_lock(&ctx.m);
+    int rc = COND_SUCCESS;
+    while (!ctx.ready && rc == COND_SUCCESS)
+        rc = cond_timedwait_ms(&ctx.c, &ctx.m, 500);
+    bool ready = ctx.ready;
+    mutex_unlock(&ctx.m);
+
+    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(ready);
+    mutex_destroy(&ctx.m);
+    cond_destroy(&ctx.c);
+    return true;
+}
+
+static bool test_cond_wait_preserves_recursive_depth(void)
+{
+    mutex_t m = MUTEX_RECURSIVE_INIT;
+    cond_t c;
+    cond_init(&c);
+
+    mutex_lock(&m);
+    mutex_lock(&m);
+    mutex_lock(&m);
+    ASSERT(mutex_get_count(&m) == 3);
+
+    ASSERT(cond_timedwait_ms(&c, &m, 20) == COND_TIMEDOUT);
+    ASSERT(mutex_get_count(&m) == 3);          
+    ASSERT(mutex_is_owned_by_current_thread(&m));
+
+    mutex_unlock(&m);
+    mutex_unlock(&m);
+    ASSERT(mutex_is_locked(&m));
+    mutex_unlock(&m);
+    ASSERT(!mutex_is_locked(&m));
+
+    mutex_destroy(&m);
+    cond_destroy(&c);
+    return true;
+}
+
+#define PC_CAP 8
+typedef struct {
+    mutex_t m;
+    cond_t  not_full, not_empty;
+    int     buf[PC_CAP];
+    int     head, tail, count;
+    int     produced_total, consumed_total, to_produce;
+    atomic_i32_t fail;
+} pc_queue_t;
+
+static void pc_push(pc_queue_t *q, int v)
+{
+    mutex_lock(&q->m);
+    while (q->count == PC_CAP)
+        cond_wait(&q->not_full, &q->m);
+    q->buf[q->tail] = v;
+    q->tail = (q->tail + 1) % PC_CAP;
+    q->count++;
+    q->produced_total++;
+    cond_signal(&q->not_empty);
+    mutex_unlock(&q->m);
+}
+
+static bool pc_pop(pc_queue_t *q, int *out)
+{
+    mutex_lock(&q->m);
+    while (q->count == 0)
+    {
+        if (q->consumed_total == q->to_produce) { mutex_unlock(&q->m); return false; }
+        cond_wait(&q->not_empty, &q->m);
+    }
+    *out = q->buf[q->head];
+    q->head = (q->head + 1) % PC_CAP;
+    q->count--;
+    q->consumed_total++;
+    cond_signal(&q->not_full);
+    mutex_unlock(&q->m);
+    return true;
+}
+
+typedef struct { pc_queue_t *q; int n; int id; } pc_arg_t;
+
+static void *pc_producer(void *p)
+{
+    pc_arg_t *a = (pc_arg_t *)p;
+    for (int i = 0; i < a->n; i++)
+        pc_push(a->q, a->id * 1000000 + i);
+    return NULL;
+}
+
+static void *pc_consumer(void *p)
+{
+    pc_arg_t *a = (pc_arg_t *)p;
+    int v;
+    while (pc_pop(a->q, &v))
+    {
+        if (v < 0) atomic_i32_fetch_add(&a->q->fail, 1);
+    }
+    return NULL;
+}
+
+static bool test_cond_producer_consumer(void)
+{
+    enum { PRODUCERS = 4, CONSUMERS = 3, PER_PRODUCER = 20000 };
+    pc_queue_t q;
+    mutex_init(&q.m, MUTEX_PLAIN);
+    cond_init(&q.not_full);
+    cond_init(&q.not_empty);
+    q.head = q.tail = q.count = 0;
+    q.produced_total = q.consumed_total = 0;
+    q.to_produce = PRODUCERS * PER_PRODUCER;
+    atomic_i32_store(&q.fail, 0);
+
+    thread_t pt[PRODUCERS], ct[CONSUMERS];
+    pc_arg_t pa[PRODUCERS], ca[CONSUMERS];
+    for (int i = 0; i < CONSUMERS; i++) { ca[i].q = &q; ASSERT(thread_create(&ct[i], pc_consumer, &ca[i], NULL) == THREAD_SUCCESS); }
+    for (int i = 0; i < PRODUCERS; i++) { pa[i].q = &q; pa[i].n = PER_PRODUCER; pa[i].id = i + 1; ASSERT(thread_create(&pt[i], pc_producer, &pa[i], NULL) == THREAD_SUCCESS); }
+
+    for (int i = 0; i < PRODUCERS; i++) ASSERT(thread_join(pt[i], NULL) == THREAD_SUCCESS);
+    
+    for (;;)
+    {
+        mutex_lock(&q.m);
+        bool done = (q.consumed_total == q.to_produce);
+        mutex_unlock(&q.m);
+        if (done) { cond_broadcast(&q.not_empty); break; }
+        thread_sleep_ms(1);
+        cond_broadcast(&q.not_empty);
+    }
+    for (int i = 0; i < CONSUMERS; i++) ASSERT(thread_join(ct[i], NULL) == THREAD_SUCCESS);
+
+    ASSERT(q.produced_total == q.to_produce);
+    ASSERT(q.consumed_total == q.to_produce);
+    ASSERT(atomic_i32_load(&q.fail) == 0);
+    mutex_destroy(&q.m);
+    cond_destroy(&q.not_full);
+    cond_destroy(&q.not_empty);
+    return true;
+}
+
+static bool test_sem_basic(void)
+{
+    sem_t s;
+    ASSERT(sem_init(&s, 2) == SEM_SUCCESS);
+    ASSERT(sem_wait(&s) == SEM_SUCCESS);
+    ASSERT(sem_wait(&s) == SEM_SUCCESS);
+    ASSERT(sem_trywait(&s) == SEM_BUSY);          
+    ASSERT(sem_post(&s) == SEM_SUCCESS);
+    ASSERT(sem_trywait(&s) == SEM_SUCCESS);       
+    ASSERT(sem_trywait(&s) == SEM_BUSY);
+    ASSERT(sem_destroy(&s) == SEM_SUCCESS);
+    return true;
+}
+
+static bool test_sem_timedwait(void)
+{
+    sem_t s;
+    ASSERT(sem_init(&s, 0) == SEM_SUCCESS);
+    u64 t0 = clock_monotonic_ms();
+    ASSERT(sem_timedwait_ms(&s, 50) == SEM_TIMEDOUT);
+    ASSERT(clock_monotonic_ms() - t0 >= 40);
+    ASSERT(sem_post(&s) == SEM_SUCCESS);
+    ASSERT(sem_timedwait_ms(&s, 1000) == SEM_SUCCESS);   
+    sem_destroy(&s);
+    return true;
+}
+
+typedef struct { sem_t *s; atomic_i32_t taken; } sem_ctx_t;
+
+static void *sem_taker(void *p)
+{
+    sem_ctx_t *c = (sem_ctx_t *)p;
+    if (sem_wait(c->s) == SEM_SUCCESS)
+        atomic_i32_fetch_add(&c->taken, 1);
+    return NULL;
+}
+
+static bool test_sem_wakes_exactly_n(void)
+{
+    enum { N = 10 };
+    sem_t s;
+    ASSERT(sem_init(&s, 0) == SEM_SUCCESS);
+    sem_ctx_t ctx = { &s, ATOMIC_INIT(0) };
+
+    thread_t t[N];
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], sem_taker, &ctx, NULL) == THREAD_SUCCESS);
+    thread_sleep_ms(30);                          
+
+    for (int i = 0; i < N; i++) ASSERT(sem_post(&s) == SEM_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+
+    ASSERT(atomic_i32_load(&ctx.taken) == N);
+    sem_destroy(&s);
+    return true;
+}
+
+typedef struct { sem_t *s; atomic_i32_t inside; atomic_i32_t max_seen; atomic_i32_t fail; int iters; } limit_ctx_t;
+
+static void *limit_worker(void *p)
+{
+    limit_ctx_t *c = (limit_ctx_t *)p;
+    for (int i = 0; i < c->iters; i++)
+    {
+        sem_wait(c->s);
+        i32 n = atomic_i32_fetch_add(&c->inside, 1) + 1;
+        i32 seen = atomic_i32_load(&c->max_seen);
+        while (n > seen && !atomic_i32_cas_weak(&c->max_seen, &seen, n)) { }
+        if (n > 3) atomic_i32_fetch_add(&c->fail, 1);
+        thread_yield();
+        atomic_i32_fetch_sub(&c->inside, 1);
+        sem_post(c->s);
+    }
+    return NULL;
+}
+
+static bool test_sem_bounds_concurrency(void)
+{
+    enum { LIMIT = 3, WORKERS = 10, ITERS = 400 };
+    sem_t s;
+    ASSERT(sem_init(&s, LIMIT) == SEM_SUCCESS);
+    limit_ctx_t ctx = { &s, ATOMIC_INIT(0), ATOMIC_INIT(0), ATOMIC_INIT(0), ITERS };
+
+    thread_t t[WORKERS];
+    for (int i = 0; i < WORKERS; i++) ASSERT(thread_create(&t[i], limit_worker, &ctx, NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < WORKERS; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+
+    ASSERT(atomic_i32_load(&ctx.fail) == 0);
+    ASSERT(atomic_i32_load(&ctx.max_seen) <= LIMIT);
+    sem_destroy(&s);
+    return true;
+}
+
+static bool test_map_basic(void)
+{
+    map_t m = map_new(0, NULL);
+    ASSERT(map_len(&m) == 0);
+    ASSERT(!map_contains_cstr(&m, "a"));
+    ASSERT(map_get_cstr(&m, "a") == NULL);
+
+    ASSERT(map_set_cstr(&m, "a", (void *)(uintptr_t)1));
+    ASSERT(map_set_cstr(&m, "b", (void *)(uintptr_t)2));
+    ASSERT(map_set_cstr(&m, "c", (void *)(uintptr_t)3));
+    ASSERT(map_len(&m) == 3);
+    ASSERT((uintptr_t)map_get_cstr(&m, "a") == 1);
+    ASSERT((uintptr_t)map_get_cstr(&m, "b") == 2);
+    ASSERT((uintptr_t)map_get_cstr(&m, "c") == 3);
+    ASSERT(map_contains_cstr(&m, "b"));
+    ASSERT(!map_contains_cstr(&m, "z"));
+
+    
+    ASSERT(map_set_cstr(&m, "b", (void *)(uintptr_t)20));
+    ASSERT(map_len(&m) == 3);                          
+    ASSERT((uintptr_t)map_get_cstr(&m, "b") == 20);
+
+    
+    ASSERT(map_remove_cstr(&m, "b"));
+    ASSERT(map_len(&m) == 2);
+    ASSERT(!map_contains_cstr(&m, "b"));
+    ASSERT(!map_remove_cstr(&m, "b"));                 
+    ASSERT(!map_remove_cstr(&m, "nope"));
+
+    void *v;
+    ASSERT(map_try_get_cstr(&m, "a", &v) && (uintptr_t)v == 1);
+    ASSERT(!map_try_get_cstr(&m, "b", &v));
+
+    map_free(&m);
+    ASSERT(map_len(&m) == 0);
+    map_free(&m);                                      
+    return true;
+}
+
+static bool test_map_null_value_disambiguation(void)
+{
+    map_t m = map_new(0, NULL);
+    ASSERT(map_set_cstr(&m, "k", NULL));
+    ASSERT(map_get_cstr(&m, "k") == NULL);              
+    ASSERT(map_contains_cstr(&m, "k"));                 
+    void *v = (void *)1;
+    ASSERT(map_try_get_cstr(&m, "k", &v));
+    ASSERT(v == NULL);
+    map_free(&m);
+    return true;
+}
+
+static bool test_map_binary_keys(void)
+{
+    map_t m = map_new(0, NULL);
+    char k1[] = { 0, 1, 2, 0, 3 };
+    char k2[] = { 0, 1, 2, 0, 4 };                      
+    ASSERT(map_set(&m, k1, sizeof(k1), (void *)(uintptr_t)11));
+    ASSERT(map_set(&m, k2, sizeof(k2), (void *)(uintptr_t)22));
+    ASSERT(map_len(&m) == 2);
+    ASSERT((uintptr_t)map_get(&m, k1, sizeof(k1)) == 11);
+    ASSERT((uintptr_t)map_get(&m, k2, sizeof(k2)) == 22);
+    ASSERT(!map_contains(&m, k1, sizeof(k1) - 1));      
+    map_free(&m);
+    return true;
+}
+
+static bool test_map_growth_and_rehash(void)
+{
+    enum { N = 5000 };
+    map_t m = map_new(0, NULL);
+    char buf[32];
+    for (int i = 0; i < N; i++)
+    {
+        snprintf(buf, sizeof(buf), "key-%d", i);
+        ASSERT(map_set_cstr(&m, buf, (void *)(uintptr_t)(i + 1)));
+    }
+    ASSERT(map_len(&m) == N);
+    ASSERT(m.cap >= N);                                 
+    for (int i = 0; i < N; i++)
+    {
+        snprintf(buf, sizeof(buf), "key-%d", i);
+        ASSERT((uintptr_t)map_get_cstr(&m, buf) == (uintptr_t)(i + 1));
+    }
+    map_free(&m);
+    return true;
+}
+
+static bool test_map_collisions(void)
+{
+    const size_t cap = 64;
+    map_t m = map_new(cap, NULL);
+    ASSERT(m.cap == cap);                               
+    size_t mask = cap - 1;
+
+    enum { N = 30 };                                     
+    static char keys[N][16];
+    int found = 0;
+    for (long long cand = 0; found < N; cand++)
+    {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%lld", cand);
+        if ((map_hash_bytes(buf, strlen(buf)) & mask) == 0)
+            snprintf(keys[found++], sizeof(keys[0]), "%lld", cand);
+    }
+
+    for (int i = 0; i < N; i++)
+        ASSERT(map_set_cstr(&m, keys[i], (void *)(uintptr_t)(i + 100)));
+    ASSERT(m.cap == cap);                                
+    ASSERT(map_len(&m) == N);
+    for (int i = 0; i < N; i++)
+        ASSERT((uintptr_t)map_get_cstr(&m, keys[i]) == (uintptr_t)(i + 100));
+
+    
+    
+    
+    for (int i = 0; i < N; i += 2)
+        ASSERT(map_remove_cstr(&m, keys[i]));
+    ASSERT(map_len(&m) == N / 2);
+
+    for (int i = 0; i < N; i++)
+    {
+        bool should_exist = (i % 2) != 0;
+        ASSERT(map_contains_cstr(&m, keys[i]) == should_exist);
+        if (should_exist)
+            ASSERT((uintptr_t)map_get_cstr(&m, keys[i]) == (uintptr_t)(i + 100));
+    }
+    map_free(&m);
+    return true;
+}
+
+static bool test_map_iterate(void)
+{
+    map_t m = map_new(0, NULL);
+    enum { N = 200 };
+    bool seen[N];
+    for (int i = 0; i < N; i++) seen[i] = false;
+    char buf[16];
+    for (int i = 0; i < N; i++)
+    {
+        snprintf(buf, sizeof(buf), "k%d", i);
+        ASSERT(map_set_cstr(&m, buf, (void *)(uintptr_t)i));
+    }
+
+    size_t it = 0;
+    const char *k; size_t kl; void *v;
+    int count = 0;
+    while (map_iterate(&m, &it, &k, &kl, &v))
+    {
+        ASSERT(kl == strlen(k));
+        int idx = (int)(uintptr_t)v;
+        ASSERT(idx >= 0 && idx < N);
+        ASSERT(!seen[idx]);                            
+        seen[idx] = true;
+        char expect[16];
+        snprintf(expect, sizeof(expect), "k%d", idx);
+        ASSERT_STR_EQ(k, expect);
+        count++;
+    }
+    ASSERT(count == N);
+    for (int i = 0; i < N; i++) ASSERT(seen[i]);
+
+    
+    map_t empty = map_new(0, NULL);
+    size_t it2 = 0;
+    ASSERT(!map_iterate(&empty, &it2, NULL, NULL, NULL));
+    map_free(&empty);
+    map_free(&m);
+    return true;
+}
+
+static int g_freed_count;
+static long g_freed_sum;
+
+static void count_free(void *v)
+{
+    g_freed_count++;
+    g_freed_sum += (long)(intptr_t)v;
+}
+
+static bool test_map_value_free(void)
+{
+    g_freed_count = 0;
+    g_freed_sum = 0;
+    map_t m = map_new(0, count_free);
+
+    ASSERT(map_set_cstr(&m, "a", (void *)(intptr_t)10));
+    ASSERT(map_set_cstr(&m, "b", (void *)(intptr_t)20));
+    ASSERT(g_freed_count == 0);                        
+
+    ASSERT(map_set_cstr(&m, "a", (void *)(intptr_t)11));   
+    ASSERT(g_freed_count == 1 && g_freed_sum == 10);
+
+    ASSERT(map_set_cstr(&m, "a", (void *)(intptr_t)11));   
+    ASSERT(g_freed_count == 1);                             
+
+    ASSERT(map_remove_cstr(&m, "b"));
+    ASSERT(g_freed_count == 2 && g_freed_sum == 30);
+
+    map_set_cstr(&m, "c", (void *)(intptr_t)5);
+    map_set_cstr(&m, "d", (void *)(intptr_t)7);
+    map_clear(&m);
+    ASSERT(map_len(&m) == 0);
+    ASSERT(g_freed_count == 5);                          
+    ASSERT(g_freed_sum == 30 + 11 + 5 + 7);
+
+    map_set_cstr(&m, "e", (void *)(intptr_t)9);
+    map_free(&m);
+    ASSERT(g_freed_count == 6);
+    return true;
+}
+
+#define REF_CAP 512
+typedef struct { char key[24]; long value; bool used; } ref_entry_t;
+static ref_entry_t g_ref[REF_CAP];
+static int g_ref_count;
+
+static int ref_find(const char *key)
+{
+    for (int i = 0; i < REF_CAP; i++)
+        if (g_ref[i].used && strcmp(g_ref[i].key, key) == 0) return i;
+    return -1;
+}
+
+static void ref_set(const char *key, long value)
+{
+    int i = ref_find(key);
+    if (i < 0)
+    {
+        for (i = 0; i < REF_CAP; i++) if (!g_ref[i].used) break;
+        snprintf(g_ref[i].key, sizeof(g_ref[i].key), "%s", key);
+        g_ref[i].used = true;
+        g_ref_count++;
+    }
+    g_ref[i].value = value;
+}
+
+static bool ref_remove(const char *key)
+{
+    int i = ref_find(key);
+    if (i < 0) return false;
+    g_ref[i].used = false;
+    g_ref_count--;
+    return true;
+}
+
+static bool test_map_random_vs_reference(void)
+{
+    map_t m = map_new(0, NULL);
+    for (int i = 0; i < REF_CAP; i++) g_ref[i].used = false;
+    g_ref_count = 0;
+
+    rng_t r = { 0xA5A5A5ULL };
+    enum { OPS = 100000, KEYSPACE = REF_CAP - 20 };
+    for (int op = 0; op < OPS; op++)
+    {
+        char key[24];
+        snprintf(key, sizeof(key), "k%llu", (unsigned long long)(rnd(&r) % KEYSPACE));
+        u64 which = rnd(&r) % 3;
+
+        if (which == 0)
+        {
+            long v = (long)(rnd(&r) & 0x7fffffff);
+            ASSERT(map_set_cstr(&m, key, (void *)(intptr_t)v));
+            ref_set(key, v);
+        }
+        else if (which == 1)
+        {
+            bool r_had = map_remove_cstr(&m, key);
+            bool ref_had = ref_remove(key);
+            ASSERT(r_had == ref_had);
+        }
+        else
+        {
+            int idx = ref_find(key);
+            void *v;
+            bool got = map_try_get_cstr(&m, key, &v);
+            ASSERT(got == (idx >= 0));
+            if (got) ASSERT((long)(intptr_t)v == g_ref[idx].value);
+        }
+        ASSERT((int)map_len(&m) == g_ref_count);
+    }
+
+    
+    for (int i = 0; i < REF_CAP; i++)
+    {
+        if (!g_ref[i].used) continue;
+        void *v;
+        ASSERT(map_try_get_cstr(&m, g_ref[i].key, &v));
+        ASSERT((long)(intptr_t)v == g_ref[i].value);
+    }
+    size_t it = 0; const char *k; void *v; int iter_count = 0;
+    while (map_iterate(&m, &it, &k, NULL, &v))
+    {
+        int i = ref_find(k);
+        ASSERT(i >= 0);
+        ASSERT((long)(intptr_t)v == g_ref[i].value);
+        iter_count++;
+    }
+    ASSERT(iter_count == g_ref_count);
+
+    map_free(&m);
+    return true;
+}
+
+static bool test_map_hash_bytes(void)
+{
+    u64 h1 = map_hash_bytes("abc", 3);
+    u64 h2 = map_hash_bytes("abc", 3);
+    u64 h3 = map_hash_bytes("abd", 3);
+    ASSERT(h1 == h2);
+    ASSERT(h1 != h3);                                   
+                                                          
+    ASSERT(map_hash_bytes("", 0) == map_hash_bytes("", 0));
+    return true;
+}
+
+static int g_counted_destroyed;
+
+CLASS(Counted)
+{
+    FIELD(int, tag)
+};
+CLASS_EXPORT(Counted);
+CLASS_INFO_ROOT(Counted);
+
+CONSTRUCTOR(Counted) { self->tag = 0; }
+DECONSTRUCTOR(Counted) { g_counted_destroyed++; }
+
+static bool test_oop_map_basic(void)
+{
+    Map *m = NEW(Map);
+    ASSERT(m != NULL);
+    ASSERT(CALL0(m, len) == 0);
+    ASSERT(!CALL1(m, contains, "a"));
+    ASSERT(CALL1(m, get, "a") == NULL);
+
+    ASSERT(CALL2(m, set, "a", (void *)(uintptr_t)1));
+    ASSERT(CALL2(m, set, "b", (void *)(uintptr_t)2));
+    ASSERT(CALL2(m, set, "c", (void *)(uintptr_t)3));
+    ASSERT(CALL0(m, len) == 3);
+    ASSERT((uintptr_t)CALL1(m, get, "a") == 1);
+    ASSERT((uintptr_t)CALL1(m, get, "b") == 2);
+    ASSERT(CALL1(m, contains, "b"));
+    ASSERT(!CALL1(m, contains, "z"));
+
+    ASSERT(CALL2(m, set, "b", (void *)(uintptr_t)20));   
+    ASSERT(CALL0(m, len) == 3);
+    ASSERT((uintptr_t)CALL1(m, get, "b") == 20);
+
+    ASSERT(CALL1(m, remove, "b"));
+    ASSERT(CALL0(m, len) == 2);
+    ASSERT(!CALL1(m, remove, "b"));
+
+    REMOVE(m);
+    return true;
+}
+
+static bool test_oop_map_null_value_disambiguation(void)
+{
+    Map *m = NEW(Map);
+    ASSERT(CALL2(m, set, "k", NULL));
+    ASSERT(CALL1(m, get, "k") == NULL);          
+    ASSERT(CALL1(m, contains, "k"));             
+    void *v = (void *)1;
+    ASSERT(CALL2(m, try_get, "k", &v));
+    ASSERT(v == NULL);
+    REMOVE(m);
+    return true;
+}
+
+static bool test_oop_map_binary_keys(void)
+{
+    Map *m = NEW(Map);
+    char k1[] = { 0, 1, 2, 0, 3 };
+    char k2[] = { 0, 1, 2, 0, 4 };                
+    ASSERT(CALL3(m, set_bytes, k1, sizeof(k1), (void *)(uintptr_t)11));
+    ASSERT(CALL3(m, set_bytes, k2, sizeof(k2), (void *)(uintptr_t)22));
+    ASSERT((uintptr_t)CALL2(m, get_bytes, k1, sizeof(k1)) == 11);
+    ASSERT((uintptr_t)CALL2(m, get_bytes, k2, sizeof(k2)) == 22);
+    ASSERT(!CALL2(m, contains_bytes, k1, sizeof(k1) - 1));   
+    ASSERT(CALL2(m, remove_bytes, k1, sizeof(k1)));
+    ASSERT(!CALL2(m, contains_bytes, k1, sizeof(k1)));
+    REMOVE(m);
+    return true;
+}
+
+static bool test_oop_map_iterate(void)
+{
+    Map *m = NEW(Map);
+    enum { N = 50 };
+    bool seen[N];
+    for (int i = 0; i < N; i++) seen[i] = false;
+    char buf[16];
+    for (int i = 0; i < N; i++)
+    {
+        snprintf(buf, sizeof(buf), "k%d", i);
+        ASSERT(CALL2(m, set, buf, (void *)(uintptr_t)i));
+    }
+
+    size_t it = 0; const char *k; size_t kl; void *v;
+    int count = 0;
+    while (CALL4(m, iterate, &it, &k, &kl, &v))
+    {
+        int idx = (int)(uintptr_t)v;
+        ASSERT(idx >= 0 && idx < N && !seen[idx]);
+        seen[idx] = true;
+        ASSERT(kl == strlen(k));
+        count++;
+    }
+    ASSERT(count == N);
+    for (int i = 0; i < N; i++) ASSERT(seen[i]);
+
+    CALL0(m, clear);
+    ASSERT(CALL0(m, len) == 0);
+    REMOVE(m);
+    return true;
+}
+
+static bool test_oop_map_owns_objects_via_c_delete(void)
+{
+    g_counted_destroyed = 0;
+    Map *m = NEW(Map);
+    CALL1(m, set_value_free, (void (*)(void *))c_delete);
+
+    Counted *a = NEW(Counted); a->tag = 1;
+    Counted *b = NEW(Counted); b->tag = 2;
+    Counted *c = NEW(Counted); c->tag = 3;
+    ASSERT(CALL2(m, set, "a", a));
+    ASSERT(CALL2(m, set, "b", b));
+    ASSERT(CALL2(m, set, "c", c));
+    ASSERT(g_counted_destroyed == 0);
+
+    Counted *replacement = NEW(Counted); replacement->tag = 99;
+    ASSERT(CALL2(m, set, "a", replacement));      
+    ASSERT(g_counted_destroyed == 1);
+
+    ASSERT(CALL1(m, remove, "b"));                 
+    ASSERT(g_counted_destroyed == 2);
+
+    REMOVE(m);                                     
+    ASSERT(g_counted_destroyed == 4);
+    return true;
+}
+
+CLASS(IncTask, Runnable)
+{
+    BASE(Runnable)
+    FIELD(atomic_i32_t *, counter)
+    FIELD(int, n)
+};
+
+METHOD_PROTO(IncTask, void *, run, (void *self));
+
+CONSTRUCTOR(IncTask)
+{
+    SUPER_CTOR(self, Runnable);
+    self->counter = NULL;
+    self->n = 0;
+    METHOD_LINK(base, IncTask, run);
+}
+DECONSTRUCTOR(IncTask)
+{
+    SUPER_DTOR(self, Runnable);
+}
+IMPLEMENT(IncTask, void *, run, (void *self))
+{
+    IncTask *this = (IncTask *)self;
+    i32 last = 0;
+    for (int i = 0; i < this->n; i++)
+        last = atomic_i32_fetch_add(this->counter, 1) + 1;
+    return (void *)(uintptr_t)last;
+}
+CLASS_INFO(IncTask, Runnable);
+
+static bool test_oop_thread_runnable_basic(void)
+{
+    static atomic_i32_t counter;
+    atomic_i32_init(&counter, 0);
+
+    IncTask *task = NEW(IncTask);
+    task->counter = &counter;
+    task->n = 1000;
+
+    Thread *t = thread_new((Runnable *)task);
+    ASSERT(t != NULL);
+    ASSERT(!CALL0(t, is_joinable));                
+    ASSERT(CALL0(t, get_id) == 0);
+    ASSERT(CALL0(t, start));
+    ASSERT(CALL0(t, is_joinable));
+
+    void *result = CALL0(t, join);
+    ASSERT((uintptr_t)result == 1000);
+    ASSERT(atomic_i32_load(&counter) == 1000);
+    ASSERT(!CALL0(t, is_joinable));                
+
+    REMOVE(t);
+    REMOVE(task);                                  
+    return true;
+}
+
+static void *oop_thread_fn_task(void *arg)
+{
+    atomic_i32_t *counter = (atomic_i32_t *)arg;
+    for (int i = 0; i < 500; i++) atomic_i32_fetch_add(counter, 1);
+    return (void *)(uintptr_t)500;
+}
+
+static bool test_oop_thread_fn(void)
+{
+    static atomic_i32_t counter;
+    atomic_i32_init(&counter, 0);
+
+    Thread *t = thread_new_fn(oop_thread_fn_task, &counter);
+    ASSERT(t != NULL);
+    ASSERT(CALL0(t, start));
+    void *result = CALL0(t, join);
+    ASSERT((uintptr_t)result == 500);
+    ASSERT(atomic_i32_load(&counter) == 500);
+
+    REMOVE(t);                                      
+    return true;
+}
+
+static bool test_oop_thread_multiple_concurrent(void)
+{
+    enum { NTHREADS = 8, PER = 5000 };
+    static atomic_i32_t counter;
+    atomic_i32_init(&counter, 0);
+
+    Thread *t[NTHREADS];
+    IncTask *tasks[NTHREADS];
+    for (int i = 0; i < NTHREADS; i++)
+    {
+        tasks[i] = NEW(IncTask);
+        tasks[i]->counter = &counter;
+        tasks[i]->n = PER;
+        t[i] = thread_new((Runnable *)tasks[i]);
+        ASSERT(t[i] != NULL);
+        ASSERT(CALL0(t[i], start));
+    }
+    for (int i = 0; i < NTHREADS; i++)
+    {
+        CALL0(t[i], join);
+        REMOVE(t[i]);
+        REMOVE(tasks[i]);
+    }
+    ASSERT(atomic_i32_load(&counter) == NTHREADS * PER);
+    return true;
+}
+
+static void *oop_detached_task(void *arg)
+{
+    atomic_i32_t *flag = (atomic_i32_t *)arg;
+    thread_sleep_ms(10);
+    atomic_i32_store(flag, 1);
+    return NULL;
+}
+
+static bool test_oop_thread_start_detached(void)
+{
+    static atomic_i32_t flag;
+    atomic_i32_init(&flag, 0);
+
+    Thread *t = thread_new_fn(oop_detached_task, &flag);
+    ASSERT(t != NULL);
+    ASSERT(CALL0(t, start_detached));
+    ASSERT(!CALL0(t, is_joinable));
+    REMOVE(t);                                      
+
+    u64 t0 = clock_monotonic_ms();
+    while (atomic_i32_load(&flag) == 0 && clock_monotonic_ms() - t0 < 2000)
+        thread_sleep_ms(1);
+    ASSERT(atomic_i32_load(&flag) == 1);             
+    return true;
+}
+
+static void *oop_forgotten_task(void *arg)
+{
+    atomic_i32_t *flag = (atomic_i32_t *)arg;
+    thread_sleep_ms(10);
+    atomic_i32_store(flag, 1);
+    return NULL;
+}
+
+static bool test_oop_thread_destructor_auto_detaches(void)
+{
+    static atomic_i32_t flag;
+    atomic_i32_init(&flag, 0);
+
+    Thread *t = thread_new_fn(oop_forgotten_task, &flag);
+    ASSERT(CALL0(t, start));
+    REMOVE(t);            
+
+    u64 t0 = clock_monotonic_ms();
+    while (atomic_i32_load(&flag) == 0 && clock_monotonic_ms() - t0 < 2000)
+        thread_sleep_ms(1);
+    ASSERT(atomic_i32_load(&flag) == 1);
+    return true;
+}
+
+static bool test_oop_thread_reused_runnable(void)
+{
+    static atomic_i32_t counter;
+    atomic_i32_init(&counter, 0);
+    IncTask *task = NEW(IncTask);
+    task->counter = &counter;
+    task->n = 10;
+
+    
+    
+    for (int round = 0; round < 5; round++)
+    {
+        Thread *t = thread_new((Runnable *)task);
+        ASSERT(CALL0(t, start));
+        CALL0(t, join);
+        REMOVE(t);
+    }
+    ASSERT(atomic_i32_load(&counter) == 50);
+    REMOVE(task);
+    return true;
+}
+
+static bool test_oop_thread_start_guards(void)
+{
+    Thread *empty = thread_new(NULL);
+    ASSERT(!CALL0(empty, start));                    
+    ASSERT(CALL0(empty, join) == NULL);               
+    ASSERT(!CALL0(empty, detach));
+    REMOVE(empty);
+
+    static atomic_i32_t counter;
+    atomic_i32_init(&counter, 0);
+    IncTask *task = NEW(IncTask);
+    task->counter = &counter;
+    task->n = 1;
+    Thread *t = thread_new((Runnable *)task);
+    ASSERT(CALL0(t, start));
+    ASSERT(!CALL0(t, start));                         
+    CALL0(t, join);
+    REMOVE(t);
+    REMOVE(task);
+    return true;
+}
+
+CLASS(MapWriterTask, Runnable)
+{
+    BASE(Runnable)
+    FIELD(Map *, map)
+    FIELD(mutex_t *, lock)
+    FIELD(char, key[16])
+    FIELD(int, value)
+};
+
+METHOD_PROTO(MapWriterTask, void *, run, (void *self));
+
+CONSTRUCTOR(MapWriterTask)
+{
+    SUPER_CTOR(self, Runnable);
+    self->map = NULL;
+    self->lock = NULL;
+    self->key[0] = '\0';
+    self->value = 0;
+    METHOD_LINK(base, MapWriterTask, run);
+}
+DECONSTRUCTOR(MapWriterTask)
+{
+    SUPER_DTOR(self, Runnable);
+}
+IMPLEMENT(MapWriterTask, void *, run, (void *self))
+{
+    MapWriterTask *this = (MapWriterTask *)self;
+    mutex_lock(this->lock);
+    CALL2(this->map, set, this->key, (void *)(uintptr_t)this->value);
+    mutex_unlock(this->lock);
+    return NULL;
+}
+CLASS_INFO(MapWriterTask, Runnable);
+
+static bool test_oop_threads_writing_to_shared_map(void)
+{
+    Map *m = NEW(Map);
+    mutex_t lock = MUTEX_INIT;
+
+    enum { N = 20 };
+    Thread *t[N];
+    MapWriterTask *tasks[N];
+    for (int i = 0; i < N; i++)
+    {
+        tasks[i] = NEW(MapWriterTask);
+        tasks[i]->map = m;
+        tasks[i]->lock = &lock;
+        snprintf(tasks[i]->key, sizeof(tasks[i]->key), "k%d", i);
+        tasks[i]->value = i * 10;
+        t[i] = thread_new((Runnable *)tasks[i]);
+        ASSERT(CALL0(t[i], start));
+    }
+    for (int i = 0; i < N; i++)
+    {
+        CALL0(t[i], join);
+        REMOVE(t[i]);
+        REMOVE(tasks[i]);
+    }
+
+    ASSERT(CALL0(m, len) == N);
+    for (int i = 0; i < N; i++)
+    {
+        char key[16];
+        snprintf(key, sizeof(key), "k%d", i);
+        ASSERT((uintptr_t)CALL1(m, get, key) == (uintptr_t)(i * 10));
+    }
+
+    mutex_destroy(&lock);
+    REMOVE(m);
+    return true;
+}
+
