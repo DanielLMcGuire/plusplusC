@@ -25,586 +25,655 @@ static inline int ld_signbit(long double val)
 #if defined(__clang__) || defined(__GNUC__)
     return __builtin_signbit(val);
 #else
-    union { double d; uint64_t u; } b;
+    union { double d; unsigned long long u; } b;
     b.d = (double)val;
     return (int)(b.u >> 63);
 #endif
 }
 
-static const long double pow10_tab[] = {
-    1e1L, 1e2L, 1e4L, 1e8L, 1e16L, 1e32L, 1e64L, 1e128L, 1e256L
-#if defined(__LDBL_MAX_10_EXP__) && (__LDBL_MAX_10_EXP__ > 1000)
-    , 1e512L, 1e1024L, 1e2048L, 1e4096L
+#if defined(__LDBL_MANT_DIG__)
+#define FP_LDBL_MANT   __LDBL_MANT_DIG__
+#define FP_LDBL_MAXEXP __LDBL_MAX_EXP__
+#define FP_LDBL_MINEXP __LDBL_MIN_EXP__
+#else
+#define FP_LDBL_MANT   53
+#define FP_LDBL_MAXEXP 1024
+#define FP_LDBL_MINEXP (-1021)
 #endif
-};
 
-static const long double inv_pow10_tab[] = {
-    1e-1L, 1e-2L, 1e-4L, 1e-8L, 1e-16L, 1e-32L, 1e-64L, 1e-128L, 1e-256L
-#if defined(__LDBL_MAX_10_EXP__) && (__LDBL_MAX_10_EXP__ > 1000)
-    , 1e-512L, 1e-1024L, 1e-2048L, 1e-4096L
-#endif
-};
+#define FP_IMAX (FP_LDBL_MAXEXP / 16 + 2)
+#define FP_FMAX ((-FP_LDBL_MINEXP + FP_LDBL_MANT) / 16 + 3)
+#define FP_IDIG ((FP_LDBL_MAXEXP * 30103) / 100000 + 8)
+#define FP_FDIG (-FP_LDBL_MINEXP + FP_LDBL_MANT + 8)
+#define FP_BUF  (FP_IDIG + FP_FDIG + 8)
 
-static int get_exp10_and_normalize(long double *pval) 
+typedef struct
 {
-    long double v = *pval;
-    int exp = 0;
-    if (v <= 0.0L) 
+    unsigned int ilimb[FP_IMAX];
+    unsigned int flimb[FP_FMAX];
+    int ni;
+    int nf;
+} fp_num;
+
+static const unsigned int fp_pow10[] = { 1u, 10u, 100u, 1000u, 10000u };
+
+static void fp_decode(long double v, fp_num *n)
+{
+    const long double B = 65536.0L;
+    n->ni = 0;
+    n->nf = 0;
+
+    if (v >= 1.0L)
     {
-        *pval = 0.0L;
-        return 0;
-    }
-    const int num_pow10 = (int)(sizeof(pow10_tab) / sizeof(pow10_tab[0]));
-    if (v >= 10.0L)
-    {
-        for (int i = num_pow10 - 1; i >= 0; i--) 
+        long double s = 1.0L;
+        int k = 0;
+        while (v >= s * B)
         {
-            while (v >= pow10_tab[i])
-            {
-                v /= pow10_tab[i];
-                exp += (1 << i);
-            }
+            s *= B;
+            k++;
         }
-    } 
-    else if (v < 1.0L)
-    {
-        for (int i = num_pow10 - 1; i >= 0; i--)
+        n->ni = k + 1;
+        for (int j = k; j >= 0; j--)
         {
-            while (v <= inv_pow10_tab[i])
-            {
-                v *= pow10_tab[i];
-                exp -= (1 << i);
-            }
-        }
-        while (v < 1.0L && v > 0.0L)
-        {
-            v *= 10.0L;
-            exp--;
+            unsigned int d = (unsigned int)(v / s);
+            n->ilimb[j] = d;
+            v -= (long double)d * s;
+            s /= B;
         }
     }
-    while (v >= 10.0L)
+
+    while (v > 0.0L && n->nf < FP_FMAX)
     {
-        v /= 10.0L;
-        exp++;
+        v *= B;
+        unsigned int d = (unsigned int)v;
+        n->flimb[n->nf++] = d;
+        v -= (long double)d;
     }
-    while (v < 1.0L && v > 0.0L)
-    {
-        v *= 10.0L;
-        exp--;
-    }
-    *pval = v;
-    return exp;
 }
 
-static void emit_float(char *buf, size_t size, size_t *idx, 
-                       long double val, int width, int zero_pad, int precision, 
-                       int uppercase, int left_align, int plus_sign, int space_sign, int alt_form) 
+static int fp_int_digits(fp_num *n, char *out)
 {
-    if (precision < 0) precision = 6;
-
-    if (ld_isnan(val))
+    if (n->ni == 0)
     {
-        int pad = width - 3;
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        emit_str(buf, size, idx, uppercase ? "NAN" : "nan");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        return;
-    }
-    if (ld_isinf(val))
-    {
-        int is_neg = ld_signbit(val);
-        char sign_char = is_neg ? '-' : (plus_sign ? '+' : (space_sign ? ' ' : 0));
-        int pad = width - 3 - (sign_char ? 1 : 0);
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        if (sign_char) emit_char(buf, size, idx, sign_char);
-        emit_str(buf, size, idx, uppercase ? "INF" : "inf");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        return;
+        out[0] = '0';
+        return 1;
     }
 
-    int is_negative = ld_signbit(val);
-    if (is_negative) val = -val;
+    char tmp[FP_IDIG + 8];
+    int t = 0;
+    int top = n->ni;
+    unsigned int *a = n->ilimb;
 
-    char digits_buf[5120];
-    for (int i = 0; i < (int)sizeof(digits_buf); i++) digits_buf[i] = '0';
-    int d_idx = 0;
-    int int_len = 0;
-    long double norm = 0.0L;
+    while (top > 0)
+    {
+        unsigned int rem = 0;
+        for (int i = top - 1; i >= 0; i--)
+        {
+            unsigned int cur = (rem << 16) | a[i];
+            a[i] = cur / 10000u;
+            rem = cur % 10000u;
+        }
+        while (top > 0 && a[top - 1] == 0)
+            top--;
+        for (int j = 0; j < 4; j++)
+        {
+            tmp[t++] = (char)('0' + rem % 10);
+            rem /= 10;
+        }
+    }
 
+    while (t > 1 && tmp[t - 1] == '0')
+        t--;
+    for (int i = 0; i < t; i++)
+        out[i] = tmp[t - 1 - i];
+    return t;
+}
+
+static unsigned int fp_frac_take(fp_num *n, int k)
+{
+    unsigned int mul = fp_pow10[k];
+    unsigned int carry = 0;
+
+    for (int i = n->nf - 1; i >= 0; i--)
+    {
+        unsigned int cur = n->flimb[i] * mul + carry;
+        n->flimb[i] = cur & 0xFFFFu;
+        carry = cur >> 16;
+    }
+    while (n->nf > 0 && n->flimb[n->nf - 1] == 0)
+        n->nf--;
+    return carry;
+}
+
+static int fp_frac_state(const fp_num *n)
+{
+    if (n->nf == 0)
+        return 0;
+    if (n->flimb[0] > 0x8000u)
+        return 3;
+    if (n->flimb[0] < 0x8000u)
+        return 1;
+    return n->nf > 1 ? 3 : 2;
+}
+
+static int fp_gen_frac(fp_num *n, char *dst, int want)
+{
+    int made = 0;
+    while (want > 0 && n->nf > 0)
+    {
+        int k = want < 4 ? want : 4;
+        unsigned int c = fp_frac_take(n, k);
+        for (int j = k - 1; j >= 0; j--)
+        {
+            dst[j] = (char)('0' + c % 10);
+            c /= 10;
+        }
+        dst += k;
+        made += k;
+        want -= k;
+    }
+    return made;
+}
+
+static int fp_tail_state(const fp_num *n, const char *d, int nd)
+{
+    if (d[0] > '5')
+        return 3;
+    if (d[0] < '5')
+        return 1;
+    for (int i = 1; i < nd; i++)
+        if (d[i] != '0')
+            return 3;
+    return fp_frac_state(n) != 0 ? 3 : 2;
+}
+
+static void fp_convert(long double v, int sci, int count, char *out, int *nout, int *exp10)
+{
+    fp_num num;
+    fp_decode(v, &num);
+
+    int n = 0;
+    int rem = 0;
+    int x = 0;
+
+    if (!sci)
+    {
+        int ilen = fp_int_digits(&num, out);
+        n = ilen + fp_gen_frac(&num, out + ilen, count);
+        rem = fp_frac_state(&num);
+        x = ilen;
+    }
+    else if (num.ni > 0)
+    {
+        int ilen = fp_int_digits(&num, out);
+        x = ilen - 1;
+        if (ilen > count)
+        {
+            rem = fp_tail_state(&num, out + count, ilen - count);
+            n = count;
+        }
+        else
+        {
+            n = ilen + fp_gen_frac(&num, out + ilen, count - ilen);
+            rem = fp_frac_state(&num);
+        }
+    }
+    else
+    {
+        int lead = 0;
+        unsigned int c;
+        do
+        {
+            c = fp_frac_take(&num, 4);
+            if (c == 0)
+                lead += 4;
+        } while (c == 0);
+
+        char ch[4];
+        for (int j = 3; j >= 0; j--)
+        {
+            ch[j] = (char)('0' + c % 10);
+            c /= 10;
+        }
+        int z = 0;
+        while (ch[z] == '0')
+            z++;
+        x = -(lead + z + 1);
+
+        int avail = 4 - z;
+        if (avail > count)
+        {
+            for (int i = 0; i < count; i++)
+                out[i] = ch[z + i];
+            rem = fp_tail_state(&num, ch + z + count, avail - count);
+            n = count;
+        }
+        else
+        {
+            for (int i = 0; i < avail; i++)
+                out[i] = ch[z + i];
+            n = avail + fp_gen_frac(&num, out + avail, count - avail);
+            rem = fp_frac_state(&num);
+        }
+    }
+
+    if (rem == 3 || (rem == 2 && ((out[n - 1] - '0') & 1)))
+    {
+        int i = n - 1;
+        while (i >= 0 && out[i] == '9')
+        {
+            out[i] = '0';
+            i--;
+        }
+        if (i >= 0)
+        {
+            out[i]++;
+        }
+        else if (sci)
+        {
+            out[0] = '1';
+            x++;
+        }
+        else
+        {
+            for (int j = n; j > 0; j--)
+                out[j] = out[j - 1];
+            out[0] = '1';
+            n++;
+            x++;
+        }
+    }
+
+    *nout = n;
+    *exp10 = x;
+}
+
+typedef struct
+{
+    const char *d;
+    int n;
+    int zero_int;
+    int ia, ib;
+    int lz;
+    int fa, fb;
+    int point;
+    int has_exp;
+    char expc;
+    int exp;
+} fp_layout;
+
+static void emit_pad(char *buf, size_t size, size_t *idx, char c, int count)
+{
+    while (count-- > 0)
+        emit_char(buf, size, idx, c);
+}
+
+static void emit_range(char *buf, size_t size, size_t *idx, const char *d, int n, int a, int b)
+{
+    for (int i = a; i < b; i++)
+        emit_char(buf, size, idx, i < n ? d[i] : '0');
+}
+
+static int fp_exp_digits(int e, char *out)
+{
+    unsigned int u = (unsigned int)(e < 0 ? -e : e);
+    char tmp[12];
+    int t = 0;
+    do
+    {
+        tmp[t++] = (char)('0' + u % 10);
+        u /= 10;
+    } while (u);
+    for (int i = 0; i < t; i++)
+        out[i] = tmp[t - 1 - i];
+    return t;
+}
+
+static void emit_layout(char *buf, size_t size, size_t *idx, const fp_layout *l, char sign,
+                        int width, int zero_pad, int left_align)
+{
+    char ed[12];
+    int en = 0;
+    int body = (l->zero_int ? 1 : l->ib - l->ia) + (l->point ? 1 : 0) + l->lz + (l->fb - l->fa);
+    if (l->has_exp)
+    {
+        en = fp_exp_digits(l->exp, ed);
+        body += 2 + (en < 2 ? 2 : en);
+    }
+
+    int pad = width - (sign ? 1 : 0) - body;
+    if (!left_align && !zero_pad)
+        emit_pad(buf, size, idx, ' ', pad);
+    if (sign)
+        emit_char(buf, size, idx, sign);
+    if (!left_align && zero_pad)
+        emit_pad(buf, size, idx, '0', pad);
+
+    if (l->zero_int)
+        emit_char(buf, size, idx, '0');
+    else
+        emit_range(buf, size, idx, l->d, l->n, l->ia, l->ib);
+    if (l->point)
+        emit_char(buf, size, idx, '.');
+    emit_pad(buf, size, idx, '0', l->lz);
+    emit_range(buf, size, idx, l->d, l->n, l->fa, l->fb);
+
+    if (l->has_exp)
+    {
+        emit_char(buf, size, idx, l->expc);
+        emit_char(buf, size, idx, l->exp < 0 ? '-' : '+');
+        emit_pad(buf, size, idx, '0', 2 - en);
+        for (int i = 0; i < en; i++)
+            emit_char(buf, size, idx, ed[i]);
+    }
+
+    if (left_align)
+        emit_pad(buf, size, idx, ' ', pad);
+}
+
+static char fp_sign_char(int negative, int plus_sign, int space_sign)
+{
+    return negative ? '-' : (plus_sign ? '+' : (space_sign ? ' ' : 0));
+}
+
+static int emit_nonfinite(char *buf, size_t size, size_t *idx, long double val, int width,
+                          int uppercase, int left_align, int plus_sign, int space_sign)
+{
+    int nan = ld_isnan(val);
+    if (!nan && !ld_isinf(val))
+        return 0;
+
+    char sign = fp_sign_char(ld_signbit(val), plus_sign, space_sign);
+    const char *text = nan ? (uppercase ? "NAN" : "nan") : (uppercase ? "INF" : "inf");
+    int pad = width - 3 - (sign ? 1 : 0);
+
+    if (!left_align)
+        emit_pad(buf, size, idx, ' ', pad);
+    if (sign)
+        emit_char(buf, size, idx, sign);
+    emit_str(buf, size, idx, text);
+    if (left_align)
+        emit_pad(buf, size, idx, ' ', pad);
+    return 1;
+}
+
+static void emit_float(char *buf, size_t size, size_t *idx,
+                       long double val, int width, int zero_pad, int precision,
+                       int uppercase, int left_align, int plus_sign, int space_sign, int alt_form)
+{
+    if (precision < 0)
+        precision = 6;
+    if (emit_nonfinite(buf, size, idx, val, width, uppercase, left_align, plus_sign, space_sign))
+        return;
+
+    int negative = ld_signbit(val);
+    if (negative)
+        val = -val;
+
+    char digits[FP_BUF];
+    int n, ilen;
     if (val == 0.0L)
     {
-        digits_buf[d_idx++] = '0';
-        int_len = 1;
-        for (int i = 0; i < precision; i++)
-            if (d_idx < (int)sizeof(digits_buf) - 2) digits_buf[d_idx++] = '0';
-    } else {
-        norm = val;
-        int exp = get_exp10_and_normalize(&norm);
-
-        if (exp < 0)
-        {
-            digits_buf[d_idx++] = '0';
-            int_len = 1;
-            int leading_zeros = -exp - 1;
-            int frac_count = 0;
-            while (frac_count < leading_zeros && frac_count < precision + 1 && d_idx < (int)sizeof(digits_buf) - 2)
-            {
-                digits_buf[d_idx++] = '0';
-                frac_count++;
-            }
-            while (frac_count < precision + 1 && d_idx < (int)sizeof(digits_buf) - 2)
-            {
-                int d = (int)norm;
-                if (d < 0) d = 0;
-                if (d > 9) d = 9;
-                digits_buf[d_idx++] = (char)('0' + d);
-                norm = (norm - d) * 10.0L;
-                frac_count++;
-            }
-        } else {
-            int_len = exp + 1;
-            int total_needed = int_len + precision + 1;
-            if (total_needed > (int)sizeof(digits_buf) - 2)
-                total_needed = (int)sizeof(digits_buf) - 2;
-
-            while (d_idx < total_needed)
-            {
-                int d = (int)norm;
-                if (d < 0) d = 0;
-                if (d > 9) d = 9;
-                digits_buf[d_idx++] = (char)('0' + d);
-                norm = (norm - d) * 10.0L;
-            }
-        }
+        digits[0] = '0';
+        n = 1;
+        ilen = 1;
     }
-
-    int carry = 0;
-    if (val != 0.0L && d_idx > 0)
-    {
-        if (digits_buf[d_idx - 1] > '5')
-        {
-            carry = 1;
-        }
-        else if (digits_buf[d_idx - 1] == '5')
-        {
-            if (norm != 0.0L)
-            {
-                carry = 1;
-            }
-            else if (d_idx > 1 && (digits_buf[d_idx - 2] - '0') % 2 != 0)
-            {
-                carry = 1;
-            }
-        }
-    }
-    if (val != 0.0L && d_idx > 0) d_idx--;
-
-    for (int i = d_idx - 1; i >= 0 && carry; i--)
-    {
-        if (digits_buf[i] == '9')
-            digits_buf[i] = '0';
-        else
-        {
-            digits_buf[i]++;
-            carry = 0;
-        }
-    }
-
-    int extra_int = carry ? 1 : 0;
-
-    char sign_char = 0;
-    if (is_negative) sign_char = '-';
-    else if (plus_sign) sign_char = '+';
-    else if (space_sign) sign_char = ' ';
-
-    int has_dot = (precision > 0) || alt_form;
-    int total_len = (int_len + extra_int) + (has_dot ? 1 : 0) + precision + (sign_char ? 1 : 0);
-    int pad_chars = width - total_len;
-
-    if (!left_align && !zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-    if (sign_char) emit_char(buf, size, idx, sign_char);
-    if (!left_align && zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, '0');
-    if (extra_int) emit_char(buf, size, idx, '1');
-    for (int i = 0; i < int_len; i++) emit_char(buf, size, idx, digits_buf[i]);
-    
-    if (has_dot)
-    {
-        emit_char(buf, size, idx, '.');
-        for (int i = 0; i < precision; i++)
-            emit_char(buf, size, idx, digits_buf[int_len + i]);
-    }
-    if (left_align) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-}
-
-static void emit_float_sci(char *buf, size_t size, size_t *idx, 
-                           long double val, int width, int zero_pad, int precision, int uppercase,
-                           int left_align, int plus_sign, int space_sign, int alt_form) 
-{
-    if (precision < 0) precision = 6;
-
-    if (ld_isnan(val))
-    {
-        int pad = width - 3;
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        emit_str(buf, size, idx, uppercase ? "NAN" : "nan");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        return;
-    }
-    if (ld_isinf(val))
-    {
-        int is_neg = ld_signbit(val);
-        char sign_char = is_neg ? '-' : (plus_sign ? '+' : (space_sign ? ' ' : 0));
-        int pad = width - 3 - (sign_char ? 1 : 0);
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        if (sign_char) emit_char(buf, size, idx, sign_char);
-        emit_str(buf, size, idx, uppercase ? "INF" : "inf");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        return;
-    }
-
-    int is_negative = ld_signbit(val);
-    if (is_negative) val = -val;
-
-    int exp = 0;
-    if (val > 0.0L)
-        exp = get_exp10_and_normalize(&val);
-
-    char digits_buf[1024];
-    int d_idx = 0;
-    
-    for (int i = 0; i < precision + 2; i++)
-    {
-        int d = (int)val;
-        if (d < 0) d = 0;
-        if (d > 9) d = 9;
-        digits_buf[d_idx++] = (char)('0' + d);
-        val = (val - d) * 10.0L;
-    }
-
-    int carry = 0;
-    if (d_idx > 0)
-    {
-        if (digits_buf[d_idx - 1] > '5')
-        {
-            carry = 1;
-        }
-        else if (digits_buf[d_idx - 1] == '5')
-        {
-            if (val != 0.0L)
-            {
-                carry = 1;
-            }
-            else if (d_idx > 1 && (digits_buf[d_idx - 2] - '0') % 2 != 0)
-            {
-                carry = 1;
-            }
-        }
-    }
-    d_idx--;
-
-    for (int i = d_idx - 1; i >= 0 && carry; i--)
-    {
-        if (digits_buf[i] == '9')
-            digits_buf[i] = '0';
-        else
-        {
-            digits_buf[i]++;
-            carry = 0;
-        }
-    }
-
-    if (carry)
-    {
-        exp++;
-        for (int i = d_idx - 1; i > 0; i--) digits_buf[i] = digits_buf[i - 1];
-        digits_buf[0] = '1';
-    }
-
-    char exp_buf[32];
-    int elen = 0;
-    int temp_exp = exp >= 0 ? exp : -exp;
-    while (temp_exp > 0)
-    {
-        exp_buf[elen++] = (char)('0' + (temp_exp % 10));
-        temp_exp /= 10;
-    }
-    if (elen < 2)
-    {
-        if (elen == 0) exp_buf[elen++] = '0';
-        exp_buf[elen++] = '0';
-    }
-
-    char sign_char = 0;
-    if (is_negative) sign_char = '-';
-    else if (plus_sign) sign_char = '+';
-    else if (space_sign) sign_char = ' ';
-
-    int has_dot = (precision > 0) || alt_form;
-    int total_len = 1 + (has_dot ? 1 : 0) + precision + 2 + elen + (sign_char ? 1 : 0);
-    int pad_chars = width - total_len;
-
-    if (!left_align && !zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-    if (sign_char) emit_char(buf, size, idx, sign_char);
-    if (!left_align && zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, '0');
-    
-    emit_char(buf, size, idx, digits_buf[0]);
-    if (has_dot)
-    {
-        emit_char(buf, size, idx, '.');
-        for (int i = 0; i < precision; i++) emit_char(buf, size, idx, digits_buf[1 + i]);
-    }
-    emit_char(buf, size, idx, uppercase ? 'E' : 'e');
-    emit_char(buf, size, idx, exp >= 0 ? '+' : '-');
-    while (elen > 0) emit_char(buf, size, idx, exp_buf[--elen]);
-    
-    if (left_align) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-}
-
-static void emit_float_g(char *buf, size_t size, size_t *idx, 
-                         long double val, int width, int zero_pad, int precision, int uppercase,
-                         int left_align, int plus_sign, int space_sign, int alt_form) 
-{
-    if (precision < 0) precision = 6;
-    if (precision == 0) precision = 1;
-
-    if (ld_isnan(val) || ld_isinf(val))
-    {
-        emit_float(buf, size, idx, val, width, zero_pad, precision, uppercase, left_align, plus_sign, space_sign, alt_form);
-        return;
-    }
-
-    long double abs_val = val < 0.0L ? -val : val;
-    int exp = 0;
-    if (abs_val > 0.0L)
-    {
-        long double v = abs_val;
-        exp = get_exp10_and_normalize(&v);
-    }
-
-    int use_e = (exp < -4 || exp >= precision);
-    int eff_precision = use_e ? (precision - 1) : (precision - 1 - exp);
-    if (eff_precision < 0) eff_precision = 0;
-
-    char tmp[1024];
-    size_t tmp_idx = 0;
-
-    if (use_e)
-        emit_float_sci(tmp, sizeof(tmp), &tmp_idx, val, 0, 0, eff_precision, uppercase, 0, 0, 0, alt_form);
     else
-        emit_float(tmp, sizeof(tmp), &tmp_idx, val, 0, 0, eff_precision, uppercase, 0, 0, 0, alt_form);
-
-    int is_neg = (tmp[0] == '-');
-    int content_start = is_neg ? 1 : 0;
-
-    char sign_char = 0;
-    if (is_neg) sign_char = '-';
-    else if (plus_sign) sign_char = '+';
-    else if (space_sign) sign_char = ' ';
-
-    int e_pos = -1;
-    for (int i = content_start; i < (int)tmp_idx; i++) 
     {
-        if (tmp[i] == 'e' || tmp[i] == 'E') 
-        {
-            e_pos = i;
-            break;
-        }
+        fp_convert(val, 0, precision, digits, &n, &ilen);
     }
 
-    int end_frac = (e_pos != -1) ? e_pos - 1 : (int)tmp_idx - 1;
-    int dot_pos = -1;
-    for (int i = content_start; i <= end_frac; i++)
-    {
-        if (tmp[i] == '.')
-        {
-            dot_pos = i;
-            break;
-        }
-    }
-
-    if (dot_pos != -1 && !alt_form)
-    {
-        int trim = end_frac;
-        while (trim > dot_pos && tmp[trim] == '0')
-            trim--;
-
-        if (trim == dot_pos)
-            trim--;
-        
-        int remove_count = end_frac - trim;
-        if (remove_count > 0)
-        {
-            int src = end_frac + 1;
-            int dst = trim + 1;
-            while (src < (int)tmp_idx)
-                tmp[dst++] = tmp[src++];
-
-            tmp_idx = dst;
-        }
-    }
-
-    int content_len = (int)tmp_idx - content_start;
-    int total_len = content_len + (sign_char ? 1 : 0);
-    int pad_chars = width - total_len;
-
-    if (!left_align && !zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-    if (sign_char) emit_char(buf, size, idx, sign_char);
-    if (!left_align && zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, '0');
-    
-    for (int i = content_start; i < (int)tmp_idx; i++)
-        emit_char(buf, size, idx, tmp[i]);
-
-    if (left_align) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
+    fp_layout l = {0};
+    l.d = digits;
+    l.n = n;
+    l.ia = 0;
+    l.ib = ilen;
+    l.fa = ilen;
+    l.fb = ilen + precision;
+    l.point = precision > 0 || alt_form;
+    emit_layout(buf, size, idx, &l, fp_sign_char(negative, plus_sign, space_sign),
+                width, zero_pad, left_align);
 }
 
-static void emit_float_hex(char *buf, size_t size, size_t *idx, 
-                          long double lval, int width, int zero_pad, int precision, int uppercase,
-                          int left_align, int plus_sign, int space_sign, int alt_form) 
+static void emit_float_sci(char *buf, size_t size, size_t *idx,
+                           long double val, int width, int zero_pad, int precision,
+                           int uppercase, int left_align, int plus_sign, int space_sign, int alt_form)
 {
-    if (ld_isnan(lval))
-    {
-        int pad = width - 3;
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        emit_str(buf, size, idx, uppercase ? "NAN" : "nan");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
+    if (precision < 0)
+        precision = 6;
+    if (emit_nonfinite(buf, size, idx, val, width, uppercase, left_align, plus_sign, space_sign))
         return;
-    }
-    if (ld_isinf(lval))
+
+    int negative = ld_signbit(val);
+    if (negative)
+        val = -val;
+
+    char digits[FP_BUF];
+    int n, x;
+    if (val == 0.0L)
     {
-        int is_neg = ld_signbit(lval);
-        char sign_char = is_neg ? '-' : (plus_sign ? '+' : (space_sign ? ' ' : 0));
-        int pad = width - 3 - (sign_char ? 1 : 0);
-        if (!left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
-        if (sign_char) emit_char(buf, size, idx, sign_char);
-        emit_str(buf, size, idx, uppercase ? "INF" : "inf");
-        if (left_align) while (pad-- > 0) emit_char(buf, size, idx, ' ');
+        digits[0] = '0';
+        n = 1;
+        x = 0;
+    }
+    else
+    {
+        fp_convert(val, 1, precision + 1, digits, &n, &x);
+    }
+
+    fp_layout l = {0};
+    l.d = digits;
+    l.n = n;
+    l.ia = 0;
+    l.ib = 1;
+    l.fa = 1;
+    l.fb = precision + 1;
+    l.point = precision > 0 || alt_form;
+    l.has_exp = 1;
+    l.expc = uppercase ? 'E' : 'e';
+    l.exp = x;
+    emit_layout(buf, size, idx, &l, fp_sign_char(negative, plus_sign, space_sign),
+                width, zero_pad, left_align);
+}
+
+static void emit_float_g(char *buf, size_t size, size_t *idx,
+                         long double val, int width, int zero_pad, int precision,
+                         int uppercase, int left_align, int plus_sign, int space_sign, int alt_form)
+{
+    int P = precision < 0 ? 6 : (precision == 0 ? 1 : precision);
+    if (emit_nonfinite(buf, size, idx, val, width, uppercase, left_align, plus_sign, space_sign))
         return;
+
+    int negative = ld_signbit(val);
+    if (negative)
+        val = -val;
+
+    char digits[FP_BUF];
+    int n, x;
+    if (val == 0.0L)
+    {
+        digits[0] = '0';
+        n = 1;
+        x = 0;
+    }
+    else
+    {
+        fp_convert(val, 1, P, digits, &n, &x);
     }
 
-    int is_negative = ld_signbit(lval);
-    if (is_negative) lval = -lval;
+    int last = -1;
+    for (int i = 0; i < n && i < P; i++)
+        if (digits[i] != '0')
+            last = i;
 
-    char tmp[128];
-    int len = 0;
-    const char *hex_digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
+    fp_layout l = {0};
+    l.d = digits;
+    l.n = n;
 
-    char sign_char = 0;
-    if (is_negative) sign_char = '-';
-    else if (plus_sign) sign_char = '+';
-    else if (space_sign) sign_char = ' ';
-
-    int lead_digit = 0;
-    int bin_exp = 0;
-    char frac_hex[40];
-    int num_frac = 0;
-
-    if (lval == 0.0L)
+    if (x < -4 || x >= P)
     {
-        lead_digit = 0;
-        bin_exp = 0;
-        num_frac = (precision >= 0) ? precision : 0;
-        for (int i = 0; i < num_frac; i++) frac_hex[i] = 0;
-    } else {
-        while (lval >= 0x1p+256L) { lval *= 0x1p-256L; bin_exp += 256; }
-        while (lval < 0x1p-256L)  { lval *= 0x1p+256L; bin_exp -= 256; }
-        while (lval >= 0x1p+32L)  { lval *= 0x1p-32L;  bin_exp += 32; }
-        while (lval < 0x1p-32L)   { lval *= 0x1p+32L;  bin_exp -= 32; }
-        while (lval >= 2.0L)      { lval *= 0.5L;      bin_exp += 1; }
-        while (lval < 1.0L)       { lval *= 2.0L;      bin_exp -= 1; }
+        l.ia = 0;
+        l.ib = 1;
+        l.fa = 1;
+        l.fb = alt_form ? P : (last + 1 > 1 ? last + 1 : 1);
+        l.has_exp = 1;
+        l.expc = uppercase ? 'E' : 'e';
+        l.exp = x;
+    }
+    else if (x >= 0)
+    {
+        l.ia = 0;
+        l.ib = x + 1;
+        l.fa = x + 1;
+        l.fb = alt_form ? P : (last + 1 > x + 1 ? last + 1 : x + 1);
+    }
+    else
+    {
+        l.zero_int = 1;
+        l.lz = -x - 1;
+        l.fa = 0;
+        l.fb = alt_form ? P : last + 1;
+    }
+    l.point = (l.lz + (l.fb - l.fa)) > 0 || alt_form;
 
-        lead_digit = 1;
-        lval -= 1.0L;
+    emit_layout(buf, size, idx, &l, fp_sign_char(negative, plus_sign, space_sign),
+                width, zero_pad, left_align);
+}
 
-        int max_digits = (sizeof(long double) > 8) ? 30 : 14;
-        int target_digits = (precision >= 0) ? (precision + 1) : max_digits;
-        if (target_digits > 35) target_digits = 35;
+#define FP_HEX_MAXNIB 28
 
-        for (int i = 0; i < target_digits; i++)
+static char fp_hex_digit(unsigned int v, int uppercase)
+{
+    return (char)(v < 10 ? '0' + v : (uppercase ? 'A' : 'a') + (v - 10));
+}
+
+static int fp_hex_split(long double val, int is_ld, unsigned int *lead, unsigned char *nib, int *exp2)
+{
+#if FP_LDBL_MANT == 64
+    if (is_ld)
+    {
+        union { long double ld; struct { unsigned long long m; unsigned short se; } s; } u;
+        u.ld = val;
+        unsigned long long m = u.s.m;
+        int be = u.s.se & 0x7fff;
+        *exp2 = (be == 0 ? 1 : be) - 16383 - 3;
+        *lead = (unsigned int)(m >> 60);
+        for (int i = 0; i < 15; i++)
+            nib[i] = (unsigned char)((m >> (56 - 4 * i)) & 0xf);
+        return 15;
+    }
+#elif FP_LDBL_MANT == 113
+    if (is_ld)
+    {
+        union { long double ld; struct { unsigned long long lo, hi; } s; } u;
+        u.ld = val;
+        int be = (int)((u.s.hi >> 48) & 0x7fff);
+        *lead = be == 0 ? 0 : 1;
+        *exp2 = (be == 0 ? 1 : be) - 16383;
+        for (int i = 0; i < 12; i++)
+            nib[i] = (unsigned char)((u.s.hi >> (44 - 4 * i)) & 0xf);
+        for (int i = 0; i < 16; i++)
+            nib[12 + i] = (unsigned char)((u.s.lo >> (60 - 4 * i)) & 0xf);
+        return 28;
+    }
+#else
+    (void)is_ld;
+#endif
+    union { double d; unsigned long long u; } b;
+    b.d = (double)val;
+    int be = (int)((b.u >> 52) & 0x7ff);
+    *lead = be == 0 ? 0 : 1;
+    *exp2 = (be == 0 ? 1 : be) - 1023;
+    for (int i = 0; i < 13; i++)
+        nib[i] = (unsigned char)((b.u >> (48 - 4 * i)) & 0xf);
+    return 13;
+}
+
+static void emit_float_hex(char *buf, size_t size, size_t *idx,
+                           long double val, int width, int zero_pad, int precision,
+                           int uppercase, int left_align, int plus_sign, int space_sign, int alt_form,
+                           int is_ld)
+{
+    if (emit_nonfinite(buf, size, idx, val, width, uppercase, left_align, plus_sign, space_sign))
+        return;
+
+    int negative = ld_signbit(val);
+    if (negative)
+        val = -val;
+
+    unsigned int lead = 0;
+    unsigned char nib[FP_HEX_MAXNIB];
+    int nn = 0;
+    int exp2 = 0;
+    if (val != 0.0L)
+        nn = fp_hex_split(val, is_ld, &lead, nib, &exp2);
+
+    int shown;
+    if (precision < 0)
+    {
+        shown = nn;
+        while (shown > 0 && nib[shown - 1] == 0)
+            shown--;
+    }
+    else
+    {
+        shown = precision;
+        if (precision < nn)
         {
-            lval *= 16.0L;
-            int d = (int)lval;
-            if (d < 0) d = 0;
-            if (d > 15) d = 15;
-            frac_hex[i] = (char)d;
-            lval -= d;
-        }
-
-        if (precision >= 0)
-        {
-            num_frac = precision;
-            if (frac_hex[precision] >= 8)
+            unsigned int first = nib[precision];
+            int rest = 0;
+            for (int i = precision + 1; i < nn; i++)
+                if (nib[i])
+                    rest = 1;
+            unsigned int last_kept = precision > 0 ? nib[precision - 1] : lead;
+            if (first > 8 || (first == 8 && (rest || (last_kept & 1))))
             {
-                int c = 1;
-                for (int i = precision - 1; i >= 0; i--)
+                int i = precision - 1;
+                while (i >= 0 && nib[i] == 0xf)
                 {
-                    int sum = frac_hex[i] + c;
-                    frac_hex[i] = (char)(sum % 16);
-                    c = sum / 16;
-                    if (c == 0) break;
+                    nib[i] = 0;
+                    i--;
                 }
-                if (c > 0)
-                {
-                    lead_digit += c;
-                    if (lead_digit == 2)
-                    {
-                        lead_digit = 1;
-                        bin_exp++;
-                    }
-                }
+                if (i >= 0)
+                    nib[i]++;
+                else
+                    lead++;
             }
-        } else {
-            num_frac = target_digits;
-            while (num_frac > 0 && frac_hex[num_frac - 1] == 0)
-                num_frac--;
         }
     }
 
-    tmp[len++] = '0';
-    tmp[len++] = uppercase ? 'X' : 'x';
-    tmp[len++] = hex_digits[lead_digit];
-
-    int has_dot = (num_frac > 0) || alt_form;
-    if (has_dot)
+    if (lead >= 16)
     {
-        tmp[len++] = '.';
-        for (int i = 0; i < num_frac; i++)
-            tmp[len++] = hex_digits[(int)frac_hex[i]];
+        lead >>= 4;
+        exp2 += 4;
     }
 
-    tmp[len++] = uppercase ? 'P' : 'p';
-    if (bin_exp >= 0)
-        tmp[len++] = '+';
-    else
-    {
-        tmp[len++] = '-';
-        bin_exp = -bin_exp;
-    }
+    char ed[12];
+    int en = fp_exp_digits(exp2, ed);
+    int has_point = shown > 0 || alt_form;
+    int body = 2 + 1 + (has_point ? 1 : 0) + shown + 2 + en;
+    char sign = fp_sign_char(negative, plus_sign, space_sign);
+    int pad = width - (sign ? 1 : 0) - body;
 
-    char exp_buf[20];
-    int elen = 0;
-    if (bin_exp == 0)
-        exp_buf[elen++] = '0';
-    else
-    {
-        while (bin_exp > 0)
-        {
-            exp_buf[elen++] = (char)('0' + (bin_exp % 10));
-            bin_exp /= 10;
-        }
-    }
+    if (!left_align && !zero_pad)
+        emit_pad(buf, size, idx, ' ', pad);
+    if (sign)
+        emit_char(buf, size, idx, sign);
+    emit_char(buf, size, idx, '0');
+    emit_char(buf, size, idx, uppercase ? 'X' : 'x');
+    if (!left_align && zero_pad)
+        emit_pad(buf, size, idx, '0', pad);
 
-    while (elen > 0) 
-        tmp[len++] = exp_buf[--elen];
+    emit_char(buf, size, idx, fp_hex_digit(lead, uppercase));
+    if (has_point)
+        emit_char(buf, size, idx, '.');
+    for (int i = 0; i < shown; i++)
+        emit_char(buf, size, idx, i < nn ? fp_hex_digit(nib[i], uppercase) : '0');
+    emit_char(buf, size, idx, uppercase ? 'P' : 'p');
+    emit_char(buf, size, idx, exp2 < 0 ? '-' : '+');
+    for (int i = 0; i < en; i++)
+        emit_char(buf, size, idx, ed[i]);
 
-    int total_len = len + (sign_char ? 1 : 0);
-    int pad_chars = width - total_len;
-
-    if (!left_align && !zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
-    if (sign_char) emit_char(buf, size, idx, sign_char);
-    if (!left_align && zero_pad) while (pad_chars-- > 0) emit_char(buf, size, idx, '0');
-    
-    for (int i = 0; i < len; i++)
-        emit_char(buf, size, idx, tmp[i]);
-
-    if (left_align) while (pad_chars-- > 0) emit_char(buf, size, idx, ' ');
+    if (left_align)
+        emit_pad(buf, size, idx, ' ', pad);
 }

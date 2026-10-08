@@ -244,7 +244,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
             case 'A': 
             {
                 long double fval = is_long_double ? va_arg(args, long double) : (long double)va_arg(args, double);
-                emit_float_hex(buf, size, &idx, fval, width, zero_pad, precision, *fmt == 'A', left_align, plus_sign, space_sign, alt_form);
+                emit_float_hex(buf, size, &idx, fval, width, zero_pad, precision, *fmt == 'A', left_align, plus_sign, space_sign, alt_form, is_long_double);
                 break;
             }
             case 'n':
