@@ -1,4 +1,6 @@
 #!/bin/sh
+# ++C Runtime Library
+# Licensed under the MIT License
 set -e
 
 EFI=${1:-out/BOOTX64.EFI}

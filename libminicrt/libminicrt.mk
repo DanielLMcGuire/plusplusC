@@ -1,3 +1,6 @@
+# ++C Runtime Library
+# Licensed under the MIT License
+
 CRT_SRC_NAMES := alloc atexit str mem sig sock mutex thread cond sem clock \
                  dstr iarr parr map format cio
 CRT_SRCS := $(addprefix libminicrt/src/,$(addsuffix .c,$(CRT_SRC_NAMES)))

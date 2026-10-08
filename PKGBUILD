@@ -1,3 +1,5 @@
+# ++C Runtime Library
+# Licensed under the MIT License
 pkgbase=libxxc
 pkgname=(libxxc libxxc-headers)
 pkgver=0.1.1

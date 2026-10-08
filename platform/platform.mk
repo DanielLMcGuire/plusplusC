@@ -1,3 +1,6 @@
+# ++C Runtime Library
+# Licensed under the MIT License
+
 PLAT_C_SRCS := platform/$(PLATDIR)/syscall.c platform/shared/tls.c platform/shared/alloc.c
 PLAT_S_SRCS := platform/$(PLATDIR)/syscall_$(ARCH).s platform/$(PLATDIR)/thread_$(ARCH).s
 PLAT_OBJS   := $(call objs,$(PLAT_C_SRCS) $(PLAT_S_SRCS))

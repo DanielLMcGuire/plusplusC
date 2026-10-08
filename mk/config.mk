@@ -1,3 +1,6 @@
+# ++C Runtime Library
+# Licensed under the MIT License
+
 ifeq ($(V),0)
   Q = @
 else

@@ -1,10 +1,14 @@
 ###################################################################
+# ++C Runtime Library
+# Licensed under the MIT License
+#
 # targets:
 #   make              build libminicrt.a, libxxc.a, tests and demos
 #   make libs         static libraries only
 #   make shared       also build libminicrt.so and libxxc.so
 #   make test         build and run the test executables
 #   make demo         build the demo executables (app, socket)
+#   make coverage     instrumented build, run all tests, print line coverage
 #   make install      install everything (PREFIX, DESTDIR)
 #   make install-libs shared libraries only
 #   make install-dev  static libraries, crt0.o and headers only
@@ -18,6 +22,7 @@
 #   PREFIX=/usr/local install prefix
 #   DESTDIR=          staging root for packaging
 #   V=1               show full compiler commands
+#   COVERAGE_MIN=N    make coverage fails below N% line coverage
 
 CC         ?= cc
 BUILD      ?= build
@@ -26,6 +31,13 @@ DESTDIR    ?=
 LTO        ?= 1
 USE_SHARED ?= 0
 V          ?= 0
+
+COVERAGE   ?= 0
+ifeq ($(COVERAGE),1)
+  override LTO        := 0
+  override USE_SHARED := 0
+  OPT ?= -O0
+endif
 
 include mk/config.mk
 include mk/rules.mk
@@ -57,6 +69,19 @@ else
   EXEC_DEPS     = $(LIBMINICRT_A) $(LIBXXC_A)
 endif
 
+ifeq ($(COVERAGE),1)
+  CFLAGS_BASE += -fprofile-arcs -ftest-coverage -fprofile-update=atomic
+  COVRT_OBJ    = $(BUILD)/covrt.o
+  EXEC_LINK   += -Wl,--wrap=program -Wl,--wrap=sys_exit
+  EXEC_LIBS    = $(COVRT_OBJ) -Wl,--whole-archive $(LIBXXC_A) $(LIBMINICRT_A) -Wl,--no-whole-archive $(EXTRA_LIBS)
+  EXEC_DEPS   += $(COVRT_OBJ)
+
+$(COVRT_OBJ): tools/coverage/covrt.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	$(Q)$(CC) -std=$(STD) -O1 $(FREESTANDING) -Ilibminicrt/include -Iplatform -c $< -o $@
+endif
+
 $(shell mkdir -p $(BUILD); echo "USE_SHARED=$(USE_SHARED) LTO=$(LTO) CC=$(CC)" | cmp -s - $(EXEC_STAMP) || echo "USE_SHARED=$(USE_SHARED) LTO=$(LTO) CC=$(CC)" > $(EXEC_STAMP))
 
 define PROGRAM_RULE
@@ -71,7 +96,7 @@ $$(BUILD)/$(1): $$(BUILD)/prog/$(1).o $$(CRT0_OBJ) $$(EXEC_DEPS) $$(EXEC_STAMP)
 endef
 $(foreach p,$(PROGRAMS),$(eval $(call PROGRAM_RULE,$(p))))
 
-.PHONY: all libs shared tests demo test check install install-libs install-dev uninstall clean help
+.PHONY: all libs shared tests demo test check coverage install install-libs install-dev uninstall clean help
 .DEFAULT_GOAL := all
 
 all: libs $(if $(SHARED_WANTED),shared) tests demo
@@ -89,6 +114,14 @@ test check: tests
 	    echo "==> $$t"; ./$(BUILD)/$$t; \
 	done
 
+coverage:
+	$(Q)$(MAKE) --no-print-directory COVERAGE=1 BUILD=build-cov tests
+	$(Q)find build-cov -name '*.gcda' -delete
+	$(Q)set -e; for t in $(TESTS); do \
+	    echo "==> $$t"; ./build-cov/$$t; \
+	done
+	$(Q)sh tools/coverage/report.sh build-cov
+
 install: install-libs install-dev
 
 install-libs: install-libs-libminicrt install-libs-libxxc
@@ -102,7 +135,7 @@ uninstall:
 	       $(DESTDIR)$(PREFIX)/include/xxc
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) build-cov
 
 help:
 	@sed -n '2,/^$$/p' Makefile | sed 's/^# \{0,1\}//'

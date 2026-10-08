@@ -1,3 +1,6 @@
+# ++C Runtime Library
+# Licensed under the MIT License
+
 XXC_SRC_NAMES := app argparse stream FileStream FSPath MemoryStream socket \
                  Map Runnable Thread
 XXC_SRCS := $(addprefix libxxc/src/,$(addsuffix .ppc,$(XXC_SRC_NAMES)))

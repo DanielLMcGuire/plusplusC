@@ -1,3 +1,6 @@
+# ++C Runtime Library
+# Licensed under the MIT License
+
 objs = $(patsubst %.ppc,$(BUILD)/obj/%.o,$(patsubst %.s,$(BUILD)/obj/%.o,$(patsubst %.c,$(BUILD)/obj/%.o,$(1))))
 
 $(BUILD)/obj/%.o: %.c
