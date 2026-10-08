@@ -72,11 +72,11 @@ endif
 ifeq ($(COVERAGE),1)
   CFLAGS_BASE += -fprofile-arcs -ftest-coverage -fprofile-update=atomic
   COVRT_OBJ    = $(BUILD)/covrt.o
-  EXEC_LINK   += -Wl,--wrap=program -Wl,--wrap=sys_exit
+  EXEC_LINK   += -Wl,--wrap=program -Wl,--wrap=syscall
   EXEC_LIBS    = $(COVRT_OBJ) -Wl,--whole-archive $(LIBXXC_A) $(LIBMINICRT_A) -Wl,--no-whole-archive $(EXTRA_LIBS)
   EXEC_DEPS   += $(COVRT_OBJ)
 
-$(COVRT_OBJ): tools/coverage/covrt.c
+$(COVRT_OBJ): tools/gcov/covrt.c
 	@mkdir -p $(dir $@)
 	@echo "  CC      $<"
 	$(Q)$(CC) -std=$(STD) -O1 $(FREESTANDING) -Ilibminicrt/include -Iplatform -c $< -o $@
@@ -120,7 +120,7 @@ coverage:
 	$(Q)set -e; for t in $(TESTS); do \
 	    echo "==> $$t"; ./build-cov/$$t; \
 	done
-	$(Q)sh tools/coverage/report.sh build-cov
+	$(Q)sh tools/gcov/report.sh build-cov
 
 install: install-libs install-dev
 
