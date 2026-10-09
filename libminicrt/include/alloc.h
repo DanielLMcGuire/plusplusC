@@ -7,13 +7,13 @@
 
 #include <def.h>
 
-size_t malloc_usable_size(void *ptr);
+size_t malloc_usable_size(void *block);
 
 void* malloc(size_t size);
 void* calloc(size_t count, size_t size);
-void* realloc(void *ptr, size_t size);
+void* realloc(void *block, size_t size);
 
-void free(void *ptr);
+void free(void *block);
 
 #if defined(__GNUC__) || defined(__clang__) 
 #define alloca(size) __builtin_alloca(size);

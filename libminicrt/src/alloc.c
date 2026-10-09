@@ -72,9 +72,9 @@ void* calloc(size_t count, size_t size)
 }
 
 #ifdef _WIN32
-void* realloc(void *ptr, size_t size)
+void* realloc(void *block, size_t size)
 {
-    if (!ptr)
+    if (!block)
     {
         if (size == 0) size = 1;
         return HeapAlloc(heap, 0, (SIZE_T)size);
@@ -82,43 +82,43 @@ void* realloc(void *ptr, size_t size)
 
     if (size == 0)
     {
-        HeapFree(heap, 0, ptr);
+        HeapFree(heap, 0, block);
         return NULL;
     }
 
-    return HeapReAlloc(heap, 0, ptr, (SIZE_T)size);
+    return HeapReAlloc(heap, 0, block, (SIZE_T)size);
 }
 #elif defined(XXC_RAWSYS)
-void* realloc(void *ptr, size_t size)
+void* realloc(void *block, size_t size)
 {
-    return __xxc_realloc(ptr, size);
+    return __xxc_realloc(block, size);
 }
 #endif
 
 #ifdef _WIN32
-void free(void *ptr) 
+void free(void *block) 
 {
-    if (!ptr) 
+    if (!block) 
         return;
 
-    HeapFree(heap, 0, ptr);
+    HeapFree(heap, 0, block);
 }
 #elif defined(XXC_RAWSYS)
-void free(void *ptr)
+void free(void *block)
 {
-    __xxc_free(ptr);
+    __xxc_free(block);
 }
 #endif
 
 #ifdef _WIN32
-size_t malloc_usable_size(void *ptr)
+size_t malloc_usable_size(void *block)
 {
-    return ptr ? (size_t)HeapSize(heap, 0, ptr) : 0;
+    return block ? (size_t)HeapSize(heap, 0, block) : 0;
 }
 #elif defined(XXC_RAWSYS)
-size_t malloc_usable_size(void *ptr)
+size_t malloc_usable_size(void *block)
 {
-    return __xxc_usable_size(ptr);
+    return __xxc_usable_size(block);
 }
 #endif
 
