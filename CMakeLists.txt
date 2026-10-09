@@ -64,6 +64,10 @@ if (XXC_BUILD_TEST)
             target_compile_definitions(xxc_${name} PRIVATE XXC_USING_SHARED_LIB)
         endif()
 
+        if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(xxc_${name} PRIVATE -Wno-literal-range)
+        endif()
+
         target_link_libraries(xxc_${name} PRIVATE ${XXC_TEST_LIB})
         if (XXC_TESTS_USES_SHARED)
             set_target_properties(xxc_${name} PROPERTIES

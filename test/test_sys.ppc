@@ -505,6 +505,7 @@ static bool test_socketstream_out_of_memory(void)
 }
 #endif /* __linux__ || __FreeBSD__ */
 
+#if defined(__linux__)
 static int child_no_descriptors(void *arg)
 {
     (void)arg;
@@ -530,6 +531,7 @@ static bool test_socketstream_descriptor_exhaustion(void)
     ASSERT(run_in_child_quiet(child_no_descriptors, NULL) == 0);
     return true;
 }
+#endif
 
 static void run_sys_tests(void)
 {
