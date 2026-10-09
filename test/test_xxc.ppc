@@ -9,6 +9,7 @@
 #include <dstr.h>
 #include <parr.h>
 #include <alloc.h>
+#include <path.h>
 #include <class.pph>
 #include <stream.pph>
 #include <mems.pph>
@@ -437,27 +438,39 @@ static dstr_t path_str(FSPath *p)
 
 static bool test_fspath_components(void)
 {
+    const char *sep =
+#if defined(_WIN32)
+        "\\";
+#else
+        "/";
+#endif
+
     dstr_t in = dstr_new("a//b\\c/");
     FSPath *p = fs_path(in);
     dstr_free(&in);
     dstr_t s = path_str(p);
-    ASSERT_STR_EQ(s.data, "a/b/c");
+    char expected[32];
+    snprintf(expected, sizeof(expected), "a%sb%sc", sep, sep);
+    ASSERT_STR_EQ(s.data, expected);
     dstr_free(&s);
 
     CALL1(p, join, "d/e");
     CALL1(p, join, NULL);
     CALL1(p, join, "");
     s = path_str(p);
-    ASSERT_STR_EQ(s.data, "a/b/c/d/e");
+    snprintf(expected, sizeof(expected), "a%sb%sc%sd%se", sep, sep, sep, sep);
+    ASSERT_STR_EQ(s.data, expected);
     dstr_free(&s);
 
     FSPath *parent = CALL0(p, parent);
     FSPath *base = CALL0(p, base);
     FSPath *rel = CALL0(p, relative);
     dstr_t ps = path_str(parent), bs = path_str(base), rs = path_str(rel);
-    ASSERT_STR_EQ(ps.data, "a/b/c/d");
+    snprintf(expected, sizeof(expected), "a%sb%sc%sd", sep, sep, sep);
+    ASSERT_STR_EQ(ps.data, expected);
     ASSERT_STR_EQ(bs.data, "e");
-    ASSERT_STR_EQ(rs.data, "a/b/c/d/e");
+    snprintf(expected, sizeof(expected), "a%sb%sc%sd%se", sep, sep, sep, sep);
+    ASSERT_STR_EQ(rs.data, expected);
     dstr_free(&ps); dstr_free(&bs); dstr_free(&rs);
     REMOVE(parent); REMOVE(base); REMOVE(rel); REMOVE(p);
 
@@ -547,6 +560,139 @@ static bool test_fspath_absolute(void)
     CALL1(a, join, "/b");
     ASSERT(!a->absolute && path_is(a, "a/b"));
     REMOVE(a);
+    return true;
+}
+
+static FSPath *fspath_of(const char *text)
+{
+    dstr_t in = dstr_new(text);
+    FSPath *p = fs_path(in);
+    dstr_free(&in);
+    return p;
+}
+
+static dstr_t cwd_parent(const char *cwd)
+{
+    dstr_t r = dstr_new(cwd);
+    while (r.len > 1 && r.data[r.len - 1] == '/') r.data[--r.len] = '\0';
+    while (r.len > 1 && r.data[r.len - 1] != '/') r.data[--r.len] = '\0';
+    while (r.len > 1 && r.data[r.len - 1] == '/') r.data[--r.len] = '\0';
+    return r;
+}
+
+static dstr_t cwd_plus(const char *cwd, const char *tail)
+{
+    dstr_t r = dstr_new(cwd);
+    if (r.len == 0 || r.data[r.len - 1] != '/') dstr_append(&r, "/");
+    dstr_append(&r, tail);
+    return r;
+}
+
+static bool test_getcwd(void)
+{
+    char *heap = getcwd(NULL, 0);
+    ASSERT(heap != NULL && heap[0] == '/');
+
+    char stack[4096];
+    ASSERT(getcwd(stack, sizeof(stack)) == stack);
+    ASSERT_STR_EQ(stack, heap);
+
+    size_t need = strlen(heap) + 1;
+    char *exact = getcwd(NULL, need);
+    ASSERT(exact != NULL);
+    ASSERT_STR_EQ(exact, heap);
+    free(exact);
+
+    char tiny[2];
+    ASSERT(strlen(heap) < 2 || getcwd(tiny, sizeof(tiny)) == NULL);
+    ASSERT(getcwd(NULL, need - 1) == NULL);
+    ASSERT(getcwd(stack, 0) == NULL);
+
+    dstr_t d;
+    ASSERT(path_getcwd(&d));
+    ASSERT_STR_EQ(d.data, heap);
+    dstr_free(&d);
+    ASSERT(!path_getcwd(NULL));
+
+    free(heap);
+    return true;
+}
+
+static bool test_fspath_dot_normalization(void)
+{
+    char *cwd = getcwd(NULL, 0);
+    ASSERT(cwd != NULL);
+
+    FSPath *a = fspath_of("a/./b/../c");
+    ASSERT(!a->absolute && path_is(a, "a/c"));
+    CALL1(a, join, "./d/./e");
+    ASSERT(path_is(a, "a/c/d/e"));
+    CALL1(a, join, "../../f");
+    ASSERT(path_is(a, "a/c/f"));
+    CALL1(a, join, "..\\g\\.\\h");
+    ASSERT(path_is(a, "a/c/g/h"));
+    REMOVE(a);
+
+    FSPath *r = fspath_of("a/b");
+    CALL1(r, join, "../../x");
+    ASSERT(!r->absolute && path_is(r, "x"));
+    REMOVE(r);
+
+    FSPath *p = fspath_of("/tmp/./x//../y/");
+    ASSERT(p->absolute && path_is(p, "/tmp/y"));
+    CALL1(p, join, "../../../../z");
+    ASSERT(p->absolute && path_is(p, "/z"));
+    CALL1(p, join, "..");
+    ASSERT(path_is(p, "/"));
+    CALL1(p, join, ".");
+    ASSERT(path_is(p, "/"));
+    REMOVE(p);
+
+    FSPath *h = fspath_of("/x/.hidden/...//a.b/..c/d..");
+    ASSERT(path_is(h, "/x/.hidden/.../a.b/..c/d.."));
+    REMOVE(h);
+
+    FSPath *tf = fspath_of("/a/b/c");
+    CALL1(tf, join, "../");
+    ASSERT(path_is(tf, "/a/b"));
+    REMOVE(tf);
+
+    FSPath *dot = fspath_of("./");
+    ASSERT(dot->absolute && path_is(dot, cwd));
+    REMOVE(dot);
+
+    FSPath *dot2 = fspath_of("");
+    CALL1(dot2, join, "./sub/file.txt");
+    dstr_t want = cwd_plus(cwd, "sub/file.txt");
+    ASSERT(dot2->absolute && path_is(dot2, want.data));
+    dstr_free(&want);
+    REMOVE(dot2);
+
+    dstr_t par = cwd_parent(cwd);
+    FSPath *up = fspath_of("..");
+    ASSERT(up->absolute && path_is(up, par.data));
+    REMOVE(up);
+
+    FSPath *up2 = fspath_of("");
+    CALL1(up2, join, "../sibling");
+    want = cwd_plus(par.data, "sibling");
+    ASSERT(path_is(up2, want.data));
+    dstr_free(&want);
+    REMOVE(up2);
+
+    FSPath *esc = fspath_of("a");
+    CALL1(esc, join, "../..");
+    ASSERT(esc->absolute && path_is(esc, par.data));
+    REMOVE(esc);
+
+    FSPath *dd = fspath_of("../..");
+    dstr_t par2 = cwd_parent(par.data);
+    ASSERT(dd->absolute && path_is(dd, par2.data));
+    dstr_free(&par2);
+    REMOVE(dd);
+
+    dstr_free(&par);
+    free(cwd);
     return true;
 }
 
@@ -675,6 +821,7 @@ static parr_t make_argv(const char *first, ...)
     return a;
 }
 
+#if defined(__linux__) || defined(__FreeBSD__)
 static bool test_argparser(void)
 {
     ArgParser *ap = NEW(ArgParser);
@@ -720,6 +867,7 @@ static bool test_argparser(void)
     REMOVE(ap);
     return true;
 }
+#endif
 
 CLASS(TestApp, Application)
 {
@@ -753,6 +901,7 @@ IMPLEMENT(TestApp, void, configure_args, (void *self))
     CALL2(t->base.args, add_value_flag, "name", "Your name");
 }
 
+#if defined(__linux__) || defined(__FreeBSD__)
 static bool test_application(void)
 {
     char out[256];
@@ -811,7 +960,9 @@ static bool test_application(void)
     REMOVE(plain);
     return true;
 }
+#endif
 
+#if defined(__linux__)
 static int child_xxc_out_of_memory(void *arg)
 {
     (void)arg;
@@ -864,6 +1015,7 @@ static bool test_xxc_out_of_memory(void)
     ASSERT(st == 0);
     return true;
 }
+#endif
 
 static void run_xxc_tests(void)
 {
@@ -885,12 +1037,16 @@ static void run_xxc_tests(void)
     RUN_TEST(test_fspath_components);
 #if defined(__linux__) || defined(__FreeBSD__)
     RUN_TEST(test_fspath_absolute);
+    RUN_TEST(test_getcwd);
+    RUN_TEST(test_fspath_dot_normalization);
     RUN_TEST(test_fspath_touch_remove);
 #endif
     RUN_TEST(test_map_byte_keys);
     RUN_TEST(test_runnable_and_thread_guards);
+#if defined(__linux__) || defined(__FreeBSD__)
     RUN_TEST(test_argparser);
     RUN_TEST(test_application);
+#endif
 #if defined(__linux__)
     RUN_TEST(test_xxc_out_of_memory);
 #endif

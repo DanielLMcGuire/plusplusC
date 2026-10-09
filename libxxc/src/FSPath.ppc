@@ -7,6 +7,7 @@
 #include <str.h>
 #include <cio.h>
 #include <mem.h>
+#include <path.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -75,42 +76,134 @@ static dstr_t fs_path_to_str(FSPath *self)
     return result;
 }
 
-static void fs_path_split(FSPath *self, const char *path) 
+#define FSPATH_MAX_COMPONENT 255
+
+static bool fs_path_is_sep(char c)
+{
+    return c == '/' || c == '\\';
+}
+
+static bool fs_comp_is(const dstr_t *c, const char *s)
+{
+    return c && c->data && strcmp(c->data, s) == 0;
+}
+
+#if defined(_WIN32)
+static bool fs_comp_is_drive(const dstr_t *c)
+{
+    return c && c->data && c->len == 2 && c->data[1] == ':';
+}
+#endif
+
+static bool fs_path_rooted(const FSPath *self)
+{
+#if defined(_WIN32)
+    return self->dsData.len > 0 && fs_comp_is_drive((const dstr_t *)self->dsData.data[0]);
+#elif defined(__UEFI__)
+    (void)self;
+    return true;
+#else
+    return self->absolute;
+#endif
+}
+
+static void fs_path_push(FSPath *self, const char *start, size_t len)
+{
+    char temp[FSPATH_MAX_COMPONENT + 1];
+    if (len > FSPATH_MAX_COMPONENT) len = FSPATH_MAX_COMPONENT;
+    memcpy(temp, start, len);
+    temp[len] = '\0';
+
+    dstr_t comp = dstr_new(temp);
+    parr_append_dstr(&self->dsData, &comp);
+    dstr_free(&comp);
+}
+
+static bool fs_path_can_pop(const FSPath *self)
+{
+    size_t n = self->dsData.len;
+    if (n == 0) return false;
+
+    const dstr_t *top = (const dstr_t *)self->dsData.data[n - 1];
+    if (fs_comp_is(top, "..")) return false;
+#if defined(_WIN32)
+    if (n == 1 && fs_comp_is_drive(top)) return false;
+#endif
+    return true;
+}
+
+static void fs_path_pop(FSPath *self)
+{
+    size_t n = self->dsData.len;
+    if (n == 0) return;
+
+    dstr_t *top = (dstr_t *)self->dsData.data[n - 1];
+    if (top)
+    {
+        dstr_free(top);
+        free(top);
+    }
+    self->dsData.len = n - 1;
+}
+
+static void fs_path_split(FSPath *self, const char *path, bool allow_cwd);
+
+static bool fs_path_seed_cwd(FSPath *self)
+{
+    dstr_t cwd;
+    bool ok = path_getcwd(&cwd);
+    if (ok) fs_path_split(self, cwd.data, false);
+    dstr_free(&cwd);
+    return ok;
+}
+
+static void fs_path_split(FSPath *self, const char *path, bool allow_cwd)
 {
     if (!path) return;
 
-    if (FSPATH_ABSOLUTE && self->dsData.len == 0 && (path[0] == '/' || path[0] == '\\'))
+    if (FSPATH_ABSOLUTE && self->dsData.len == 0 && fs_path_is_sep(path[0]))
         self->absolute = true;
 
     const char *curr = path;
-    while (*curr) 
+    while (*curr)
     {
 #if defined(_WIN32)
         if (*curr == ':') curr++;
 #endif
 
-        if (*curr == '/' || *curr == '\\') 
+        if (fs_path_is_sep(*curr))
         {
             curr++;
             continue;
         }
 
         const char *start = curr;
-        while (*curr && *curr != '/' && *curr != '\\')
+        while (*curr && !fs_path_is_sep(*curr))
             curr++;
-        
+
         size_t len = curr - start;
-        if (len > 0) 
+        if (len == 0) continue;
+
+        if (len == 1 && start[0] == '.')
         {
-            char temp[256];
-            if (len >= 256) len = 255;
-            memcpy(temp, start, len);
-            temp[len] = '\0';
-            
-            dstr_t comp = dstr_new(temp);
-            parr_append_dstr(&self->dsData, &comp);
-            dstr_free(&comp);
+            if (allow_cwd && self->dsData.len == 0 && !fs_path_rooted(self))
+                fs_path_seed_cwd(self);
+            continue;
         }
+
+        if (len == 2 && start[0] == '.' && start[1] == '.')
+        {
+            if (allow_cwd && self->dsData.len == 0 && !fs_path_rooted(self))
+                fs_path_seed_cwd(self);
+
+            if (fs_path_can_pop(self))
+                fs_path_pop(self);
+            else if (!fs_path_rooted(self))
+                fs_path_push(self, "..", 2);
+            continue;
+        }
+
+        fs_path_push(self, start, len);
     }
 }
 
@@ -118,7 +211,7 @@ IMPLEMENT(FSPath, void, join, (void *self, const char *path))
 {
     FSPath *this = (FSPath *)self;
     if (!path) return;
-    fs_path_split(this, path);
+    fs_path_split(this, path, true);
 }
 
 IMPLEMENT(FSPath, FSPath *, parent, (void *self)) 
@@ -209,6 +302,6 @@ IMPLEMENT(FSPath, dstr_t, data, (void *self))
 FSPath *fs_path(dstr_t path)
 {
     FSPath *p = NEW(FSPath);
-    fs_path_split(p, path.data);
+    fs_path_split(p, path.data, true);
     return p;
 }

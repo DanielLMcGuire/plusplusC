@@ -21,7 +21,7 @@ KBASE ?= initrd=\\initrd.img quiet splash vt.global_cursor_default=0 fbcon=nodef
 KFLAGS ?=
 BOOT_INI = out/boot.ini
 
-CRT_SRCS = str mem dstr iarr parr map alloc atexit format cio clock
+CRT_SRCS = str mem dstr iarr parr map alloc atexit format cio clock path
 
 XXC_SRCS = stream FileStream FSPath MemoryStream Map argparse app
 PLAT_SRCS = crt0 alloc console fs clock

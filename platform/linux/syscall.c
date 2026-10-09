@@ -24,6 +24,11 @@ long sys_unlink(const char *path)
     return syscall(__NR_unlinkat, (long)AT_FDCWD, (long)path, 0L);
 }
 
+long sys_getcwd(char *buf, size_t size)
+{
+    return syscall(__NR_getcwd, (long)buf, (long)size);
+}
+
 long sys_lseek(int fd, long offset, int whence)
 {
     return syscall(__NR_lseek, (long)fd, offset, (long)whence);

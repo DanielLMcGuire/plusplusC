@@ -44,6 +44,8 @@ if (NOT TARGET minicrt)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cio.c
         ${CMAKE_CURRENT_SOURCE_DIR}/include/cio.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/path.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/path.h
     )
 
     set(MINICRT_CORE_SOURCES
@@ -89,6 +91,8 @@ if (NOT TARGET minicrt)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/format.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cio.c
         ${CMAKE_CURRENT_SOURCE_DIR}/include/cio.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/path.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/path.h
     )
 
     set(MINICRT_SOURCES
