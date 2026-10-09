@@ -49,7 +49,6 @@ XXC_DYN_EXPORT HANDLE heap = INVALID_HANDLE_VALUE;
 
 void* malloc(size_t size)
 {
-    if (size == 0) size = 1;
     return HeapAlloc(heap, 0, (SIZE_T)size);
 }
 #elif defined(XXC_RAWSYS)
