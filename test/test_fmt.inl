@@ -1168,7 +1168,7 @@ static bool test_format_misc(void)
     snprintf(b, sizeof(b), "abc%");
     ASSERT_STR_EQ(b, "abc%");
 
-    ASSERT(snprintf(NULL, 0, "%d-%s", 123, "abc") == 7);
+    ASSERT(snprintf(nullptr, 0, "%d-%s", 123, "abc") == 7);
     ASSERT(snprintf(b, 0, "hello") == 5);
     ASSERT(snprintf(b, 1, "hello") == 5 && b[0] == '\0');
     ASSERT(snprintf(b, 4, "hello") == 5);

@@ -1,4 +1,4 @@
-// ++C Runtime Library - coverage runtime (test tooling only)
+// ++C Runtime Library - libgcov compatibility
 // Licensed under the MIT License
 
 #include <def.h>
@@ -55,7 +55,7 @@ static struct gcov_info *g_list;
 
 void __gcov_init(struct gcov_info *info)
 {
-    if (!info || !info->version || !info->n_functions)
+    if (info  || !info->version || !info->n_functions)
         return;
 
     info->next = g_list;
@@ -218,7 +218,7 @@ static void dump_one(const struct gcov_info *gi)
     {
         const struct gcov_fn_info *fi = gi->functions[f];
 
-        if (!fi) continue;
+        if (fi == nullptr) continue;
         if (fi->key != gi) continue;
         if (w + 5 > BUF_WORDS) return;
 

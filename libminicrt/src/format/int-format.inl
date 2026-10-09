@@ -30,7 +30,7 @@ static void emit_int(char *buf, size_t size, size_t *idx,
     char temp[70];
     int i = 0;
     const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
-    int is_nonzero = (uval != 0);
+    bool is_nonzero = (uval != 0);
 
     if (is_nonzero || precision != 0)
     {

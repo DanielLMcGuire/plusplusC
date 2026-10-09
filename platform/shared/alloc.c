@@ -99,9 +99,9 @@ static inline u32 class_size(unsigned cls)
 static char *os_map_aligned(size_t size)
 {
     size_t total = size + XXC_PAGE_SIZE;
-    if (total < size) return NULL;
-    char *raw = (char *)sys_mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!raw) return NULL;
+    if (total < size) return nullptr;
+    char *raw = (char *)sys_mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (raw == nullptr) return nullptr;
 
     uintptr_t a = ((uintptr_t)raw + XXC_PAGE_SIZE - 1) & XXC_PAGE_MASK;
     size_t head = a - (uintptr_t)raw;
@@ -114,7 +114,7 @@ static char *os_map_aligned(size_t size)
 static xxc_page *pool_get_locked(void)
 {
     xxc_page *p = g_page_pool;
-    if (p)
+    if (p != nullptr)
     {
         g_page_pool = p->next;
         g_pool_count--;
@@ -123,7 +123,7 @@ static xxc_page *pool_get_locked(void)
     if (g_chunk_cur == g_chunk_end)
     {
         char *c = os_map_aligned(XXC_CHUNK_PAGES * XXC_PAGE_SIZE);
-        if (!c) return NULL;
+        if (c == nullptr) return nullptr;
         g_chunk_cur = c;
         g_chunk_end = c + XXC_CHUNK_PAGES * XXC_PAGE_SIZE;
     }
@@ -146,8 +146,8 @@ static xxc_heap *heap_struct_new_locked(void)
     size_t sz = align_up_sz(sizeof(xxc_heap), XXC_CACHELINE);
     if ((size_t)(g_heap_end - g_heap_cur) < sz)
     {
-        char *m = (char *)sys_mmap(NULL, XXC_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-        if (!m) return NULL;
+        char *m = (char *)sys_mmap(nullptr, XXC_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (m == nullptr) return nullptr;
         g_heap_cur = m;
         g_heap_end = m + XXC_PAGE_SIZE;
     }
@@ -158,22 +158,22 @@ static xxc_heap *heap_struct_new_locked(void)
 
 static inline void list_unlink(xxc_heap *h, xxc_page *pg)
 {
-    if (pg->prev) pg->prev->next = pg->next; else h->pages[pg->cls] = pg->next;
-    if (pg->next) pg->next->prev = pg->prev;
-    pg->next = pg->prev = NULL;
+    if (pg->prev != nullptr) pg->prev->next = pg->next; else h->pages[pg->cls] = pg->next;
+    if (pg->next != nullptr) pg->next->prev = pg->prev;
+    pg->next = pg->prev = nullptr;
 }
 
 static inline void list_push(xxc_heap *h, xxc_page *pg)
 {
-    pg->prev = NULL;
+    pg->prev = nullptr;
     pg->next = h->pages[pg->cls];
-    if (pg->next) pg->next->prev = pg;
+    if (pg->next != nullptr) pg->next->prev = pg;
     h->pages[pg->cls] = pg;
 }
 
 static void page_maybe_retire(xxc_heap *h, xxc_page *pg, bool locked)
 {
-    if (h->pages[pg->cls] == pg && pg->next == NULL)
+    if (h->pages[pg->cls] == pg && pg->next == nullptr)
         return;
     list_unlink(h, pg);
 
@@ -208,7 +208,7 @@ static void heap_drain_delayed(xxc_heap *h, bool locked)
 {
     if (!atomic_ptr_load_explicit(&h->delayed, ATOMIC_RELAXED))
         return;
-    xxc_block *b = (xxc_block *)atomic_ptr_exchange_explicit(&h->delayed, NULL, ATOMIC_ACQUIRE);
+    xxc_block *b = (xxc_block *)atomic_ptr_exchange_explicit(&h->delayed, nullptr, ATOMIC_ACQUIRE);
     while (b)
     {
         xxc_block *next = b->next;
@@ -220,7 +220,7 @@ static void heap_drain_delayed(xxc_heap *h, bool locked)
 static xxc_page *page_new(xxc_heap *h, unsigned cls)
 {
     xxc_page *pg = h->spare;
-    if (pg)
+    if (pg != nullptr)
     {
         h->spare = pg->next;
         h->nspare--;
@@ -230,7 +230,7 @@ static xxc_page *page_new(xxc_heap *h, unsigned cls)
         __crt_lock_acquire(&g_lock);
         pg = pool_get_locked();
         __crt_lock_release(&g_lock);
-        if (!pg) return NULL;
+        if (pg == nullptr) return nullptr;
     }
     pg->magic      = XXC_MAGIC_SMALL;
     pg->heap       = h;
@@ -240,7 +240,7 @@ static xxc_page *page_new(xxc_heap *h, unsigned cls)
     pg->capacity   = (u32)((XXC_PAGE_SIZE - XXC_PAGE_HDR) / pg->block_size);
     pg->fresh      = 0;
     pg->used       = 0;
-    pg->free       = NULL;
+    pg->free       = nullptr;
     list_push(h, pg);
     return pg;
 }
@@ -249,11 +249,11 @@ static XXC_NOINLINE xxc_heap *heap_acquire(void)
 {
     __crt_lock_acquire(&g_lock);
     xxc_heap *h = g_idle_heaps;
-    if (h)
+    if (h != nullptr)
         g_idle_heaps = h->next_idle;
     else
         h = heap_struct_new_locked();
-    if (h)
+    if (h != nullptr)
         atomic_u32_store(&h->idle, 0);
     __crt_lock_release(&g_lock);
 
@@ -264,14 +264,14 @@ static XXC_NOINLINE xxc_heap *heap_acquire(void)
 void __xxc_heap_thread_exit(void)
 {
     xxc_heap *h = t_heap;
-    if (!h) return;
+    if (h == nullptr) return;
 
     heap_drain_delayed(h, false);
 
     for (unsigned c = 0; c < XXC_NUM_CLASSES; c++)
     {
         xxc_page *pg = h->pages[c];
-        while (pg)
+        while (pg != nullptr)
         {
             xxc_page *next = pg->next;
             if (pg->used == 0)
@@ -298,7 +298,7 @@ void __xxc_heap_thread_exit(void)
     atomic_u32_store(&h->idle, 1);
     __crt_lock_release(&g_lock);
 
-    t_heap = NULL;
+    t_heap = nullptr;
 }
 
 static XXC_NOINLINE void *small_alloc_slow(xxc_heap *h, unsigned cls)
@@ -308,10 +308,10 @@ static XXC_NOINLINE void *small_alloc_slow(xxc_heap *h, unsigned cls)
     for (;;)
     {
         xxc_page *pg = h->pages[cls];
-        if (!pg)
+        if (pg == nullptr)
         {
             pg = page_new(h, cls);
-            if (!pg) return NULL;
+            if (pg == nullptr) return nullptr;
         }
         xxc_block *b = pg->free;
         if (b)
@@ -335,17 +335,17 @@ static XXC_NOINLINE void *small_alloc_slow(xxc_heap *h, unsigned cls)
 static inline void *small_alloc(size_t size)
 {
     xxc_heap *h = t_heap;
-    if (XXC_UNLIKELY(!h))
+    if (XXC_UNLIKELY(h == nullptr))
     {
         h = heap_acquire();
-        if (!h) return NULL;
+        if (h == nullptr) return nullptr;
     }
     unsigned cls = class_of(size);
     xxc_page *pg = h->pages[cls];
-    if (XXC_LIKELY(pg != NULL))
+    if (XXC_LIKELY(pg != nullptr))
     {
         xxc_block *b = pg->free;
-        if (XXC_LIKELY(b != NULL))
+        if (XXC_LIKELY(b != nullptr))
         {
             pg->free = b->next;
             pg->used++;
@@ -378,10 +378,10 @@ static void free_remote(xxc_heap *h, xxc_block *b)
 
 static void *large_alloc(size_t size, bool *zeroed)
 {
-    if (size > XXC_MAX_REQUEST) return NULL;
+    if (size > XXC_MAX_REQUEST) return nullptr;
     size_t need = align_up_sz(size + XXC_LARGE_HDR, XXC_PAGE_SIZE);
 
-    char *base = NULL;
+    char *base = nullptr;
     size_t msize = 0;
 
     __crt_lock_acquire(&g_lock);
@@ -396,18 +396,18 @@ static void *large_alloc(size_t size, bool *zeroed)
     {
         base = g_large_cache[best].base;
         msize = g_large_cache[best].size;
-        g_large_cache[best].base = NULL;
+        g_large_cache[best].base = nullptr;
     }
     __crt_lock_release(&g_lock);
 
-    if (base)
+    if (base != nullptr)
     {
         if (zeroed) *zeroed = false;
     }
     else
     {
         base = os_map_aligned(need);
-        if (!base) return NULL;
+        if (base == nullptr) return nullptr;
         msize = need;
         if (zeroed) *zeroed = true;
     }
@@ -428,7 +428,7 @@ static void large_free(xxc_large *L)
         __crt_lock_acquire(&g_lock);
         for (int i = 0; i < XXC_LARGE_SLOTS; i++)
         {
-            if (!g_large_cache[i].base)
+            if (g_large_cache[i].base == nullptr)
             {
                 g_large_cache[i].base = (char *)L;
                 g_large_cache[i].size = msize;
@@ -452,14 +452,14 @@ static inline void *alloc_impl(size_t size, bool *zeroed)
 
 void *__xxc_malloc(size_t size)
 {
-    return alloc_impl(size, NULL);
+    return alloc_impl(size, nullptr);
 }
 
 void *__xxc_calloc(size_t count, size_t size)
 {
     size_t total = count * size;
     if (count != 0 && total / count != size)
-        return NULL;
+        return nullptr;
     bool zeroed;
     void *p = alloc_impl(total, &zeroed);
     if (p && !zeroed)
@@ -469,7 +469,7 @@ void *__xxc_calloc(size_t count, size_t size)
 
 void __xxc_free(void *ptr)
 {
-    if (!ptr) return;
+    if (ptr == nullptr) return;
     xxc_page *pg = page_of(ptr);
     if (XXC_LIKELY(pg->magic == XXC_MAGIC_SMALL))
     {
@@ -490,7 +490,7 @@ void __xxc_free(void *ptr)
 
 size_t __xxc_usable_size(void *ptr)
 {
-    if (!ptr) return 0;
+    if (ptr == nullptr) return 0;
     xxc_page *pg = page_of(ptr);
     if (pg->magic == XXC_MAGIC_SMALL) return pg->block_size;
     if (pg->magic == XXC_MAGIC_LARGE) return ((xxc_large *)pg)->map_size - XXC_LARGE_HDR;
@@ -499,11 +499,11 @@ size_t __xxc_usable_size(void *ptr)
 
 void *__xxc_realloc(void *ptr, size_t size)
 {
-    if (!ptr) return __xxc_malloc(size);
+    if (ptr == nullptr) return __xxc_malloc(size);
     if (size == 0)
     {
         __xxc_free(ptr);
-        return NULL;
+        return nullptr;
     }
 
     size_t usable = __xxc_usable_size(ptr);
@@ -511,7 +511,7 @@ void *__xxc_realloc(void *ptr, size_t size)
         return ptr;
 
     void *n = __xxc_malloc(size);
-    if (!n) return NULL;
+    if (n == nullptr) return nullptr;
     memcpy(n, ptr, usable < size ? usable : size);
     __xxc_free(ptr);
     return n;

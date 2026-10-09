@@ -27,7 +27,7 @@ CLASS_INFO_ROOT(FSPath);
 
 CONSTRUCTOR(FSPath)
 {
-    self->dsData = parr_new(NULL, 0);
+    self->dsData = parr_new(nullptr, 0);
     self->absolute = false;
     METHOD_LINK(FSPath, join);
     METHOD_LINK(FSPath, parent);
@@ -159,7 +159,7 @@ static bool fs_path_seed_cwd(FSPath *self)
 
 static void fs_path_split(FSPath *self, const char *path, bool allow_cwd)
 {
-    if (!path) return;
+    if (path == nullptr) return;
 
     if (FSPATH_ABSOLUTE && self->dsData.len == 0 && fs_path_is_sep(path[0]))
         self->absolute = true;
@@ -210,7 +210,7 @@ static void fs_path_split(FSPath *self, const char *path, bool allow_cwd)
 IMPLEMENT(FSPath, void, join, (void *self, const char *path)) 
 {
     FSPath *this = (FSPath *)self;
-    if (!path) return;
+    if (path == nullptr) return;
     fs_path_split(this, path, true);
 }
 
@@ -272,7 +272,7 @@ IMPLEMENT(FSPath, bool, touch, (void *self))
     bool success = false;
 
 #if defined(_WIN32)
-    HANDLE h = CreateFileA(path_str.data, GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h = CreateFileA(path_str.data, GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h != INVALID_HANDLE_VALUE)
     {
         CloseHandle(h);

@@ -12,7 +12,7 @@ static void emit_char(char *buf, size_t size, size_t *idx, char c)
 
 static void emit_str(char *buf, size_t size, size_t *idx, const char *s)
 {
-    if (!s) s = "(null)";
+    if (s == nullptr) s = "(null)";
     while (*s)
         emit_char(buf, size, idx, *s++);
 }

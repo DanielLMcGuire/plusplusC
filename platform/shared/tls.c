@@ -52,7 +52,7 @@ static struct {
     size_t      memsz;
     size_t      align;
     size_t      off;
-} g_tls = { NULL, 0, 0, 1, 0 };
+} g_tls = { nullptr, 0, 0, 1, 0 };
 
 #if defined(__i386__)
 static u32 g_gs_entry;
@@ -67,14 +67,14 @@ static void tls_scan(int argc, char **argv)
     while (*envp) envp++;
     const unsigned long *av = (const unsigned long *)(envp + 1);
 
-    const xxc_phdr_t *ph = NULL;
+    const xxc_phdr_t *ph = nullptr;
     size_t phnum = 0;
     for (; av[0] != AT_NULL; av += 2)
     {
         if (av[0] == AT_PHDR)  ph = (const xxc_phdr_t *)av[1];
         if (av[0] == AT_PHNUM) phnum = (size_t)av[1];
     }
-    if (!ph) return;
+    if (ph == nullptr) return;
 
     uintptr_t bias = 0;
     for (size_t i = 0; i < phnum; i++)
@@ -205,27 +205,27 @@ static int tls_snapshot_dynamic(int argc, char **argv)
     while (*envp) envp++;
     const unsigned long *av = (const unsigned long *)(envp + 1);
 
-    const xxc_phdr_t *ph = NULL;
+    const xxc_phdr_t *ph = nullptr;
     size_t phnum = 0;
     for (; av[0] != AT_NULL; av += 2)
     {
         if (av[0] == AT_PHDR)  ph = (const xxc_phdr_t *)av[1];
         if (av[0] == AT_PHNUM) phnum = (size_t)av[1];
     }
-    if (!ph) return 0;
+    if (ph == nullptr) return 0;
 
     uintptr_t bias = 0;
     for (size_t i = 0; i < phnum; i++)
         if (ph[i].p_type == PT_PHDR) { bias = (uintptr_t)ph - (uintptr_t)ph[i].p_vaddr; break; }
 
-    xxc_r_debug_t *rd = NULL;
+    xxc_r_debug_t *rd = nullptr;
     for (size_t i = 0; i < phnum && !rd; i++)
     {
         if (ph[i].p_type != PT_DYNAMIC) continue;
         for (const xxc_dyn_t *d = (const xxc_dyn_t *)(bias + (uintptr_t)ph[i].p_vaddr); d->d_tag != 0; d++)
             if (d->d_tag == DT_DEBUG) { rd = (xxc_r_debug_t *)(uintptr_t)d->d_val; break; }
     }
-    if (!rd || !rd->r_map) return 0;
+    if (rd == nullptr || !rd->r_map) return 0;
 
     size_t total = 0, maxal = 1;
 
@@ -234,7 +234,7 @@ static int tls_snapshot_dynamic(int argc, char **argv)
     for (const xxc_link_map_t *m = rd->r_map->l_next; m; m = m->l_next)
     {
         const xxc_ehdr_t *eh = (const xxc_ehdr_t *)(uintptr_t)m->l_addr;
-        if (!eh || eh->e_ident[0] != 0x7f || eh->e_ident[1] != 'E' ||
+        if (eh == nullptr || eh->e_ident[0] != 0x7f || eh->e_ident[1] != 'E' ||
             eh->e_ident[2] != 'L'  || eh->e_ident[3] != 'F')
             continue;
         tls_accum((const xxc_phdr_t *)((const char *)eh + eh->e_phoff), eh->e_phnum, &total, &maxal);
@@ -245,9 +245,9 @@ static int tls_snapshot_dynamic(int argc, char **argv)
     size_t a = maxal < 16 ? 16 : maxal;
     size_t n = (size_t)align_up_u(total, a);
 
-    char *snap = (char *)sys_mmap(NULL, align_up_u(n, 4096), PROT_READ | PROT_WRITE,
+    char *snap = (char *)sys_mmap(nullptr, align_up_u(n, 4096), PROT_READ | PROT_WRITE,
                                   MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!snap) return 0;
+    if (snap == nullptr) return 0;
 
     const char *tp = (const char *)get_thread_pointer();
 #if defined(__aarch64__)
@@ -279,8 +279,8 @@ void __xxc_platform_init(int argc, char **argv)
     tls_scan(argc, argv);
 
     size_t len = align_up_u(__xxc_tls_area_size() + 64, 4096);
-    char *area = (char *)sys_mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!area)
+    char *area = (char *)sys_mmap(nullptr, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (area == nullptr)
     {
         static const char msg[] = "xxc: cannot allocate TLS block\n";
         sys_write(2, msg, sizeof(msg) - 1);

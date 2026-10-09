@@ -44,7 +44,7 @@ typedef struct {
 static inline void draw_bgrt_logo(Display *disp)
 {
     EFI_GUID acpi_guid = EFI_ACPI_20_TABLE_GUID;
-    ACPI_RSDP *rsdp = NULL;
+    ACPI_RSDP *rsdp = nullptr;
 
     for (UINTN i = 0; i < __uefi_st->NumberOfTableEntries; i++)
     {
@@ -55,13 +55,13 @@ static inline void draw_bgrt_logo(Display *disp)
         }
     }
 
-    if (!rsdp || !rsdp->XsdtAddress) return;
+    if (rsdp == nullptr || rsdp->XsdtAddress == nullptr) return;
 
     ACPI_HEADER *xsdt = (ACPI_HEADER *)rsdp->XsdtAddress;
     int entries = (xsdt->Length - sizeof(ACPI_HEADER)) / sizeof(UINT64);
     UINT64 *table_ptrs = (UINT64 *)(xsdt + 1);
 
-    ACPI_BGRT *bgrt = NULL;
+    ACPI_BGRT *bgrt = nullptr;
 
     for (int i = 0; i < entries; i++)
     {

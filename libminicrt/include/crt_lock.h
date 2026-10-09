@@ -61,7 +61,7 @@ static inline void __crt_lock_acquire(crt_lock_t *lock)
     int c = __atomic_exchange_n(&lock->state, 2, __ATOMIC_ACQUIRE);
     while (c != 0)
     {
-        sys_futex(&lock->state, FUTEX_WAIT_PRIVATE, 2, NULL, NULL, 0);
+        sys_futex(&lock->state, FUTEX_WAIT_PRIVATE, 2, nullptr, nullptr, 0);
         c = __atomic_exchange_n(&lock->state, 2, __ATOMIC_ACQUIRE);
     }
 }
@@ -77,7 +77,7 @@ static inline void __crt_lock_release(crt_lock_t *lock)
     if (__atomic_fetch_sub(&lock->state, 1, __ATOMIC_RELEASE) != 1)
     {
         __atomic_store_n(&lock->state, 0, __ATOMIC_RELEASE);
-        sys_futex(&lock->state, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+        sys_futex(&lock->state, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
     }
 }
 

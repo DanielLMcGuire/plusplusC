@@ -17,7 +17,7 @@ static CHAR16 g_cmdline[1024];
 static bool read_all(const char *path, u8 **out, size_t *size)
 {
     SCOPED Stream *f = fopen_str(path, "r");
-    if (!f) return false;
+    if (f == nullptr) return false;
 
     CALL2(f, seek, 0, FS_SEEK_END);
     i64 n = CALL0(f, tell);
@@ -33,7 +33,7 @@ static bool read_all(const char *path, u8 **out, size_t *size)
         got += (size_t)r;
     }
 
-    if (!buf || got != (size_t)n) { free(buf); return false; }
+    if (buf == nullptr || got != (size_t)n) { free(buf); return false; }
     buf[got] = 0;
     *out  = buf;
     *size = got;
@@ -93,7 +93,7 @@ static void parse_boot_ini(const char *p, boot_cfg_t *cfg)
 
 static void cmd_join(dstr_t *cmd, const char *part)
 {
-    if (!part || !part[0]) return;
+    if (part == nullptr || part[0] == nullptr) return;
     if (cmd->len > 0) dstr_append_char(cmd, ' ');
     dstr_append(cmd, part);
 }
@@ -103,7 +103,7 @@ int program(parr_t csArgs)
     (void)csArgs;
     EFI_BOOT_SERVICES *bs = __uefi_st->BootServices;
 
-    u8 *ini = NULL;
+    u8 *ini = nullptr;
     size_t inisize = 0;
     if (!read_all(BOOT_INI, &ini, &inisize))
     {
@@ -121,7 +121,7 @@ int program(parr_t csArgs)
         return 1;
     }
 
-    u8 *kernel = NULL;
+    u8 *kernel = nullptr;
     size_t ksize = 0;
     if (!read_all(cfg.kernel.data, &kernel, &ksize))
     {
@@ -155,8 +155,8 @@ int program(parr_t csArgs)
     dstr_free(&cfg.base);
     dstr_free(&cfg.args);
 
-    EFI_HANDLE child = NULL;
-    EFI_STATUS st = bs->LoadImage(0, __uefi_image, NULL, kernel, ksize, &child);
+    EFI_HANDLE child = nullptr;
+    EFI_STATUS st = bs->LoadImage(0, __uefi_image, nullptr, kernel, ksize, &child);
     if (EFI_ERROR(st))
     {
         printf("LoadImage failed: 0x%llx (is this not an EFI-stub kernel? Is Secure Boot on?)\n", (long long)st);
@@ -165,10 +165,10 @@ int program(parr_t csArgs)
     }
 
     EFI_GUID lig = EFI_LOADED_IMAGE_GUID;
-    EFI_LOADED_IMAGE_PROTOCOL *self_li = NULL, *kern_li = NULL;
+    EFI_LOADED_IMAGE_PROTOCOL *self_li = nullptr, *kern_li = nullptr;
     bs->HandleProtocol(__uefi_image, &lig, (void **)&self_li);
     bs->HandleProtocol(child,        &lig, (void **)&kern_li);
-    if (!self_li || !kern_li)
+    if (self_li == nullptr || kern_li == nullptr)
     {
         puts("error: no LoadedImage protocol", SIOOUT);
         return 1;
@@ -185,7 +185,7 @@ int program(parr_t csArgs)
         draw_bgrt_logo(disp);
     }
 
-    st = bs->StartImage(child, NULL, NULL);
+    st = bs->StartImage(child, nullptr, nullptr);
 
     printf("kernel returned: 0x%llx\n", (long long)st);
     return 1;

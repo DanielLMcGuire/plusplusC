@@ -152,7 +152,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
             case 's':
             {
                 const char *s = va_arg(args, const char *);
-                if (!s) s = "(null)";
+                if (s == nullptr) s = "(null)";
                 int slen = 0;
                 while (s[slen] != '\0' && (precision < 0 || slen < precision))
                     slen++;
@@ -204,7 +204,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
             case 'p':
             {
                 void *ptr = va_arg(args, void *);
-                if (!ptr)
+                if (ptr == nullptr)
                 {
                     const char *nil_str = "(nil)";
                     int slen = 5;

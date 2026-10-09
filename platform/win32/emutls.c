@@ -42,7 +42,7 @@ static XXC_NORETURN void emutls_oom(void)
 {
     static const char msg[] = "xxc: out of memory (thread-local storage)\n";
     DWORD written;
-    WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, sizeof(msg) - 1, &written, NULL);
+    WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, sizeof(msg) - 1, &written, nullptr);
     ExitProcess(127);
 }
 
@@ -50,15 +50,15 @@ static void *emutls_aligned_alloc(size_t size, size_t align)
 {
     if (align < sizeof(void *)) align = sizeof(void *);
     void *raw = malloc(size + align - 1 + sizeof(void *));
-    if (!raw) return NULL;
+    if (raw == nullptr) return nullptr;
     uintptr_t p = ((uintptr_t)raw + sizeof(void *) + align - 1) & ~(uintptr_t)(align - 1);
     ((void **)p)[-1] = raw;
     return (void *)p;
 }
 
-static void emutls_aligned_free(void *p)
+static void emutls_aligned_free(void *block)
 {
-    if (p) free(((void **)p)[-1]);
+    if (block != nullptr) free(((void **)block)[-1]);
 }
 
 void *__emutls_get_address(void *object)
@@ -80,10 +80,10 @@ void *__emutls_get_address(void *object)
 
     DWORD slot = get_tls_slot();
     emutls_array_t *arr = (emutls_array_t *)TlsGetValue(slot);
-    if (!arr)
+    if (arr == nullptr)
     {
         arr = (emutls_array_t *)calloc(1, sizeof(*arr));
-        if (!arr) emutls_oom();
+        if (arr == nullptr) emutls_oom();
         TlsSetValue(slot, arr);
     }
 
@@ -91,17 +91,17 @@ void *__emutls_get_address(void *object)
     {
         size_t newcap = index + 16;
         void **p = (void **)realloc(arr->slots, newcap * sizeof(void *));
-        if (!p) emutls_oom();
+        if (p == nullptr) emutls_oom();
         memset(p + arr->cap, 0, (newcap - arr->cap) * sizeof(void *));
         arr->slots = p;
         arr->cap = newcap;
     }
 
     void *val = arr->slots[index - 1];
-    if (!val)
+    if (val == nullptr)
     {
         val = emutls_aligned_alloc((size_t)obj->size, (size_t)obj->align);
-        if (!val) emutls_oom();
+        if (val == nullptr) emutls_oom();
         if (obj->templ)
             memcpy(val, obj->templ, (size_t)obj->size);
         else
@@ -115,10 +115,10 @@ void __xxc_emutls_thread_exit(void)
 {
     DWORD slot = get_tls_slot();
     emutls_array_t *arr = (emutls_array_t *)TlsGetValue(slot);
-    if (!arr) return;
+    if (arr == nullptr) return;
     for (size_t i = 0; i < arr->cap; i++)
         emutls_aligned_free(arr->slots[i]);
     free(arr->slots);
     free(arr);
-    TlsSetValue(slot, NULL);
+    TlsSetValue(slot, nullptr);
 }

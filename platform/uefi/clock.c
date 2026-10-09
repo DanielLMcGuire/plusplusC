@@ -40,7 +40,7 @@ void __uefi_clock_init(void)
 
 bool __uefi_get_time(EFI_TIME *t)
 {
-    return __uefi_st->RuntimeServices->GetTime(t, NULL) == EFI_SUCCESS;
+    return __uefi_st->RuntimeServices->GetTime(t, nullptr) == EFI_SUCCESS;
 }
 
 static i64 days_from_civil(i64 y, unsigned m, unsigned d)

@@ -91,7 +91,7 @@ sock_addr_in_t sock_make_addr(u32 addr_host_order, u16 port_host_order)
 
 bool sock_inet_pton4(const char *src, sock_in_addr_t *out)
 {
-    if (!src || !out)
+    if (src == nullptr || out == nullptr)
         return false;
 
     u32 result = 0;
@@ -156,7 +156,7 @@ u32 sock_inet_addr(const char *src)
 
 bool sock_inet_ntop4(const sock_in_addr_t *addr, char *dst, size_t dst_size)
 {
-    if (!addr || !dst || dst_size == 0)
+    if (addr == nullptr || !dst || dst_size == 0)
         return false;
 
     u32 h = sock_ntohl(addr->s_addr);
@@ -246,7 +246,7 @@ sock_t sock_accept(sock_t s, sock_addr_in_t *out_addr)
 {
     int addrlen = (int)sizeof(sock_addr_in_t);
 
-    SOCKET c = accept(s, out_addr ? (struct sockaddr *)out_addr : NULL, out_addr ? &addrlen : NULL);
+    SOCKET c = accept(s, out_addr ? (struct sockaddr *)out_addr : nullptr, out_addr ? &addrlen : nullptr);
 
     if (c == INVALID_SOCKET)
     {
@@ -312,8 +312,8 @@ i64 sock_recvfrom(sock_t s, void *buf, size_t len, i32 flags, sock_addr_in_t *ou
     int addrlen = (int)sizeof(sock_addr_in_t);
 
     int r = recvfrom(s, (char *)buf, (int)len, (int)flags,
-                      out_addr ? (struct sockaddr *)out_addr : NULL,
-                      out_addr ? &addrlen : NULL);
+                      out_addr ? (struct sockaddr *)out_addr : nullptr,
+                      out_addr ? &addrlen : nullptr);
 
     if (r == SOCKET_ERROR)
     {
@@ -524,7 +524,7 @@ i64 sock_sendto(sock_t s, const void *buf, size_t len, i32 flags, const sock_add
 {
 #if defined(__FreeBSD__)
     sock_addr_in_t fixed;
-    if (addr) { fixed = sock_bsd_fix(addr); addr = &fixed; }
+    if (addr != nullptr) { fixed = sock_bsd_fix(addr); addr = &fixed; }
 #endif
     long r = sys_sendto(s, buf, len, (int)flags, addr, (unsigned int)sizeof(*addr));
 

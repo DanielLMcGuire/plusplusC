@@ -9,16 +9,16 @@ static EFI_FILE_PROTOCOL *g_root;
 
 static EFI_FILE_PROTOCOL *root(void)
 {
-    if (g_root) return g_root;
+    if (g_root != nullptr) return g_root;
 
     EFI_GUID lig = EFI_LOADED_IMAGE_GUID, sfg = EFI_SIMPLE_FILE_SYSTEM_GUID;
-    EFI_LOADED_IMAGE_PROTOCOL *li = NULL;
-    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *sfs = NULL;
+    EFI_LOADED_IMAGE_PROTOCOL *li = nullptr;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *sfs = nullptr;
     EFI_BOOT_SERVICES *bs = __uefi_st->BootServices;
 
-    if (bs->HandleProtocol(__uefi_image, &lig, (void **)&li) != EFI_SUCCESS || !li) return NULL;
-    if (bs->HandleProtocol(li->DeviceHandle, &sfg, (void **)&sfs) != EFI_SUCCESS || !sfs) return NULL;
-    if (sfs->OpenVolume(sfs, &g_root) != EFI_SUCCESS) g_root = NULL;
+    if (bs->HandleProtocol(__uefi_image, &lig, (void **)&li) != EFI_SUCCESS || !li) return nullptr;
+    if (bs->HandleProtocol(li->DeviceHandle, &sfg, (void **)&sfs) != EFI_SUCCESS || !sfs) return nullptr;
+    if (sfs->OpenVolume(sfs, &g_root) != EFI_SUCCESS) g_root = nullptr;
     return g_root;
 }
 
@@ -38,16 +38,16 @@ static bool to_ucs2(const char *path, CHAR16 *out)
 static EFI_FILE_PROTOCOL *open_raw(const char *path, UINT64 mode)
 {
     CHAR16 wpath[PATH_MAX_];
-    EFI_FILE_PROTOCOL *r = root(), *f = NULL;
-    if (!r || !to_ucs2(path, wpath)) return NULL;
-    if (r->Open(r, &f, wpath, mode, 0) != EFI_SUCCESS) return NULL;
+    EFI_FILE_PROTOCOL *r = root(), *f = nullptr;
+    if (r == nullptr || !to_ucs2(path, wpath)) return nullptr;
+    if (r->Open(r, &f, wpath, mode, 0) != EFI_SUCCESS) return nullptr;
     return f;
 }
 
 void *__uefi_fopen(const char *path, const char *mode)
 {
     bool plus = mode[1] == '+';
-    EFI_FILE_PROTOCOL *f = NULL;
+    EFI_FILE_PROTOCOL *f = nullptr;
 
     switch (mode[0])
     {
@@ -64,7 +64,7 @@ void *__uefi_fopen(const char *path, const char *mode)
             if (f) f->SetPosition(f, ~0ULL);
             return f;
     }
-    return NULL;
+    return nullptr;
 }
 
 i64 __uefi_fread(void *h, void *buf, size_t n)
@@ -120,21 +120,21 @@ i64 __uefi_fseek(void *h, i64 off, int whence)
 
 void __uefi_fclose(void *h)
 {
-    if (!h || UEFI_IS_STD(h)) return;
+    if (h == nullptr || UEFI_IS_STD(h)) return;
     ((EFI_FILE_PROTOCOL *)h)->Close(h);
 }
 
 bool __uefi_remove(const char *path)
 {
     EFI_FILE_PROTOCOL *f = open_raw(path, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE);
-    if (!f) return false;
+    if (f == nullptr) return false;
     return f->Delete(f) == EFI_SUCCESS;
 }
 
 bool __uefi_touch(const char *path)
 {
     EFI_FILE_PROTOCOL *f = open_raw(path, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE);
-    if (!f) return false;
+    if (f == nullptr) return false;
     f->Close(f);
     return true;
 }

@@ -30,7 +30,7 @@ typedef struct {
 
 static bool draw_bitmap(Display *d, const u8 *data, size_t size, i32 dest_x, i32 dest_y)
 {
-    if (!d || !data || size < sizeof(bmp_file_header_t) + sizeof(bmp_info_header_t))
+    if (d == nullptr || data == nullptr || size < sizeof(bmp_file_header_t) + sizeof(bmp_info_header_t))
         return false;
 
     const bmp_file_header_t *file_hdr = (const bmp_file_header_t *)data;

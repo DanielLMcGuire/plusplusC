@@ -19,5 +19,5 @@ DECONSTRUCTOR(Runnable)
 IMPLEMENT(Runnable, void *, run, (void *self))
 {
     (void)self;
-    return NULL;
+    return nullptr;
 }

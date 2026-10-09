@@ -20,7 +20,7 @@ u64 clock_monotonic_ns(void)
 {
     static volatile LONGLONG freq = 0;
     LONGLONG f = freq;
-    if (!f)
+    if (f == nullptr)
     {
         LARGE_INTEGER q;
         QueryPerformanceFrequency(&q);

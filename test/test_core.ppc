@@ -74,11 +74,11 @@ static bool test_dstr_null_guards(void)
 {
     dstr_t s = dstr_new("keep");
 
-    dstr_append(NULL, "x");
-    dstr_append(&s, NULL);
-    dstr_append_char(NULL, 'x');
-    dstr_append_int(NULL, 1);
-    dstr_append_size_t(NULL, 1);
+    dstr_append(nullptr, "x");
+    dstr_append(&s, nullptr);
+    dstr_append_char(nullptr, 'x');
+    dstr_append_int(nullptr, 1);
+    dstr_append_size_t(nullptr, 1);
     ASSERT_STR_EQ(s.data, "keep");
 
     dstr_t none = {0, 0, 0};
@@ -86,16 +86,16 @@ static bool test_dstr_null_guards(void)
     dstr_append_char(&none, 'x');
     dstr_append_int(&none, 1);
     dstr_append_size_t(&none, 1);
-    ASSERT(none.data == NULL && none.len == 0);
+    ASSERT(none.data == nullptr && none.len == 0);
 
-    dstr_free(NULL);
+    dstr_free(nullptr);
     dstr_free(&none);
     dstr_free(&s);
     dstr_free(&s);
-    ASSERT(s.data == NULL);
+    ASSERT(s.data == nullptr);
 
-    dstr_t from_null = dstr_new(NULL);
-    ASSERT(from_null.data != NULL && from_null.len == 0 && from_null.data[0] == '\0');
+    dstr_t from_null = dstr_new(nullptr);
+    ASSERT(from_null.data != nullptr && from_null.len == 0 && from_null.data[0] == '\0');
     dstr_append(&from_null, "ok");
     ASSERT_STR_EQ(from_null.data, "ok");
     dstr_free(&from_null);
@@ -119,22 +119,22 @@ static bool test_iarr_ops(void)
     ASSERT(a.len == 45 && a.data[44] == 1);
 
     size_t before = a.len;
-    iarr_append(NULL, more, 1);
-    iarr_append(&a, NULL, 1);
+    iarr_append(nullptr, more, 1);
+    iarr_append(&a, nullptr, 1);
     iarr_append(&a, more, 0);
     ASSERT(a.len == before);
 
     iarr_t empty = {0, 0, 0};
     iarr_append(&empty, more, 1);
     iarr_append_val(&empty, 1);
-    ASSERT(empty.data == NULL);
+    ASSERT(empty.data == nullptr);
 
-    iarr_t e2 = iarr_new(NULL, 0);
-    ASSERT(e2.len == 0 && e2.data != NULL);
+    iarr_t e2 = iarr_new(nullptr, 0);
+    ASSERT(e2.len == 0 && e2.data != nullptr);
     iarr_free(&e2);
     iarr_free(&a);
     iarr_free(&a);
-    iarr_free(NULL);
+    iarr_free(nullptr);
     return true;
 }
 
@@ -157,33 +157,33 @@ static bool test_parr_ops(void)
     ASSERT(p.len == 142);
 
     size_t before = p.len;
-    parr_append(NULL, (const void **)many, 1);
-    parr_append(&p, NULL, 1);
+    parr_append(nullptr, (const void **)many, 1);
+    parr_append(&p, nullptr, 1);
     parr_append(&p, (const void **)many, 0);
-    parr_append_val(NULL, NULL);
+    parr_append_val(nullptr, nullptr);
     ASSERT(p.len == before);
 
     parr_t none = {0, 0, 0};
     parr_append(&none, (const void **)many, 1);
     parr_append_val(&none, (void *)"x");
-    ASSERT(none.data == NULL);
+    ASSERT(none.data == nullptr);
 
     parr_free(&p);
     parr_free(&p);
-    parr_free(NULL);
-    ASSERT(p.data == NULL);
+    parr_free(nullptr);
+    ASSERT(p.data == nullptr);
     return true;
 }
 
 static bool test_parr_strings(void)
 {
-    parr_t cs = parr_new(NULL, 0);
+    parr_t cs = parr_new(nullptr, 0);
     parr_append_cstr(&cs, "alpha");
     parr_append_cstr(&cs, "");
     parr_append_cstr(&cs, "gamma");
-    parr_append_cstr(NULL, "ignored");
+    parr_append_cstr(nullptr, "ignored");
     ASSERT(cs.len == 3);
-    parr_append_cstr(&cs, NULL);
+    parr_append_cstr(&cs, nullptr);
     ASSERT(cs.len == 4);
     ASSERT_STR_EQ((const char *)cs.data[3], "");
     free(cs.data[3]);
@@ -192,12 +192,12 @@ static bool test_parr_strings(void)
     ASSERT_STR_EQ((const char *)cs.data[1], "");
 
     dstr_t d = dstr_new("delta");
-    parr_t ds = parr_new(NULL, 0);
+    parr_t ds = parr_new(nullptr, 0);
     parr_append_dstr(&ds, &d);
-    parr_append_dstr(&ds, NULL);
+    parr_append_dstr(&ds, nullptr);
     dstr_t nodata = {0, 0, 0};
     parr_append_dstr(&ds, &nodata);
-    parr_append_dstr(NULL, &d);
+    parr_append_dstr(nullptr, &d);
     ASSERT(ds.len == 3);
     ASSERT_STR_EQ(((dstr_t *)ds.data[0])->data, "delta");
     ASSERT_STR_EQ(((dstr_t *)ds.data[1])->data, "");
@@ -211,8 +211,8 @@ static bool test_parr_strings(void)
     ASSERT(back.len == 3);
     ASSERT_STR_EQ((const char *)back.data[0], "alpha");
 
-    parr_t odd = parr_new(NULL, 0);
-    parr_append_val(&odd, NULL);
+    parr_t odd = parr_new(nullptr, 0);
+    parr_append_val(&odd, nullptr);
     parr_append_val(&odd, &nodata);
     parr_t odd_cs = parr_dstr_to_c_strings(&odd);
     ASSERT(odd_cs.len == 2);
@@ -221,9 +221,9 @@ static bool test_parr_strings(void)
     parr_free_c_strings(&odd_cs);
     parr_free(&odd);
 
-    parr_t e1 = parr_c_strings_to_dstr(NULL);
-    parr_t e2 = parr_dstr_to_c_strings(NULL);
-    ASSERT(e1.data == NULL && e2.data == NULL);
+    parr_t e1 = parr_c_strings_to_dstr(nullptr);
+    parr_t e2 = parr_dstr_to_c_strings(nullptr);
+    ASSERT(e1.data == nullptr && e2.data == nullptr);
 
     parr_free_c_strings(&back);
     parr_free_dstr(&conv);
@@ -231,14 +231,14 @@ static bool test_parr_strings(void)
     parr_free_c_strings(&cs);
     dstr_free(&d);
 
-    parr_t holes = parr_new(NULL, 0);
-    parr_append_val(&holes, NULL);
+    parr_t holes = parr_new(nullptr, 0);
+    parr_append_val(&holes, nullptr);
     parr_free_c_strings(&holes);
-    parr_t holes2 = parr_new(NULL, 0);
-    parr_append_val(&holes2, NULL);
+    parr_t holes2 = parr_new(nullptr, 0);
+    parr_append_val(&holes2, nullptr);
     parr_free_dstr(&holes2);
-    parr_free_c_strings(NULL);
-    parr_free_dstr(NULL);
+    parr_free_c_strings(nullptr);
+    parr_free_dstr(nullptr);
     parr_t emp = {0, 0, 0};
     parr_free_c_strings(&emp);
     parr_free_dstr(&emp);
@@ -303,10 +303,10 @@ static bool test_cio_output(void)
 
     ASSERT(capture_begin(&cap, 1));
     int r_print   = print("hi", SIOOUT);
-    int r_null    = print(NULL, SIOOUT);
+    int r_null    = print(nullptr, SIOOUT);
     int r_empty   = print("", SIOOUT);
     int r_puts    = puts("line", SIOOUT);
-    int r_pnull   = puts(NULL, SIOOUT);
+    int r_pnull   = puts(nullptr, SIOOUT);
     int r_putc    = putchar('z', SIOOUT);
     dstr_t d = dstr_new("ds");
     int r_pds     = print_ds(&d, SIOOUT);
@@ -333,27 +333,27 @@ static bool test_cio_parr_printing(void)
     char out[256];
     capture_t cap;
 
-    parr_t cs = parr_new(NULL, 0);
+    parr_t cs = parr_new(nullptr, 0);
     parr_append_cstr(&cs, "a");
-    parr_append_val(&cs, NULL);
+    parr_append_val(&cs, nullptr);
     parr_append_cstr(&cs, "b");
 
     dstr_t x = dstr_new("x");
     dstr_t nodata = {0, 0, 0};
-    parr_t ds = parr_new(NULL, 0);
+    parr_t ds = parr_new(nullptr, 0);
     parr_append_val(&ds, &x);
-    parr_append_val(&ds, NULL);
+    parr_append_val(&ds, nullptr);
     parr_append_val(&ds, &nodata);
 
-    parr_t empty = parr_new(NULL, 0);
+    parr_t empty = parr_new(nullptr, 0);
 
     ASSERT(capture_begin(&cap, 1));
     print_parr_c_string(&cs, SIOOUT);
     print_parr_dstr(&ds, SIOOUT);
     print_parr_c_string(&empty, SIOOUT);
     print_parr_dstr(&empty, SIOOUT);
-    print_parr_c_string(NULL, SIOOUT);
-    print_parr_dstr(NULL, SIOOUT);
+    print_parr_c_string(nullptr, SIOOUT);
+    print_parr_dstr(nullptr, SIOOUT);
     capture_end(&cap, out, sizeof(out));
 
     ASSERT_STR_EQ(out, "[\"a\", \"\", \"b\"]\n[\"x\", \"\", \"\"]\n[]\n[]\n");
@@ -397,27 +397,27 @@ static bool test_cio_printf_sizes(void)
 static bool test_mutex_validation(void)
 {
     mutex_t m;
-    ASSERT(mutex_init(NULL, MUTEX_PLAIN) == MUTEX_ERROR);
+    ASSERT(mutex_init(nullptr, MUTEX_PLAIN) == MUTEX_ERROR);
     ASSERT(mutex_init(&m, 99) == MUTEX_ERROR);
     ASSERT(mutex_init(&m, -1) == MUTEX_ERROR);
-    ASSERT(mutex_create(77) == NULL);
+    ASSERT(mutex_create(77) == nullptr);
 
-    ASSERT(mutex_destroy(NULL) == MUTEX_ERROR);
-    ASSERT(mutex_lock(NULL) == MUTEX_ERROR);
-    ASSERT(mutex_trylock(NULL) == MUTEX_ERROR);
-    ASSERT(mutex_unlock(NULL) == MUTEX_ERROR);
-    ASSERT(!mutex_is_locked(NULL));
-    ASSERT(!mutex_is_owned_by_current_thread(NULL));
-    ASSERT(mutex_get_owner(NULL) == 0);
-    ASSERT(mutex_get_count(NULL) == 0);
-    mutex_free(NULL);
+    ASSERT(mutex_destroy(nullptr) == MUTEX_ERROR);
+    ASSERT(mutex_lock(nullptr) == MUTEX_ERROR);
+    ASSERT(mutex_trylock(nullptr) == MUTEX_ERROR);
+    ASSERT(mutex_unlock(nullptr) == MUTEX_ERROR);
+    ASSERT(!mutex_is_locked(nullptr));
+    ASSERT(!mutex_is_owned_by_current_thread(nullptr));
+    ASSERT(mutex_get_owner(nullptr) == 0);
+    ASSERT(mutex_get_count(nullptr) == 0);
+    mutex_free(nullptr);
     return true;
 }
 
 static bool test_mutex_plain(void)
 {
     mutex_t *m = mutex_create(MUTEX_PLAIN);
-    ASSERT(m != NULL);
+    ASSERT(m != nullptr);
     ASSERT(!mutex_is_locked(m));
 
     ASSERT(mutex_lock(m) == MUTEX_SUCCESS);
@@ -527,7 +527,7 @@ static void *contend_worker(void *arg)
         c->counter = v + 1;
         __crt_lock_release(&c->lock);
     }
-    return NULL;
+    return nullptr;
 }
 
 static bool test_crt_lock_contention(void)
@@ -538,9 +538,9 @@ static bool test_crt_lock_contention(void)
 
     thread_t t[CONTEND_THREADS];
     for (int i = 0; i < CONTEND_THREADS; i++)
-        ASSERT(thread_create(&t[i], contend_worker, &c, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_create(&t[i], contend_worker, &c, nullptr) == THREAD_SUCCESS);
     for (int i = 0; i < CONTEND_THREADS; i++)
-        ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+        ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     ASSERT(c.counter == (long)CONTEND_THREADS * CONTEND_ITERS);
 
     ASSERT(__crt_lock_tryacquire(&c.lock));
@@ -575,7 +575,7 @@ static void h_c(void)   { putchar('C', SIOOUT); }
 static int child_atexit_fill(void *arg)
 {
     (void)arg;
-    if (atexit(NULL) != -1)
+    if (atexit(nullptr) != -1)
         return 10;
 
     int count = 0;
@@ -597,7 +597,7 @@ static bool test_atexit_order_and_limit(void)
     static char out[512];
     capture_t cap;
     ASSERT(capture_begin(&cap, 1));
-    int st = run_in_child(child_atexit_fill, NULL);
+    int st = run_in_child(child_atexit_fill, nullptr);
     capture_end(&cap, out, sizeof(out));
 
     ASSERT(st == 0);
@@ -637,19 +637,19 @@ static bool test_exit_variants(void)
     capture_t cap;
 
     ASSERT(capture_begin(&cap, 1));
-    int st = run_in_child(child_exit_code, NULL);
+    int st = run_in_child(child_exit_code, nullptr);
     capture_end(&cap, out, sizeof(out));
     ASSERT(st == 7);
     ASSERT_STR_EQ(out, "A");
 
     ASSERT(capture_begin(&cap, 1));
-    st = run_in_child(child_underscore_exit, NULL);
+    st = run_in_child(child_underscore_exit, nullptr);
     capture_end(&cap, out, sizeof(out));
     ASSERT(st == 42);
     ASSERT_STR_EQ(out, "");
 
     ASSERT(capture_begin(&cap, 1));
-    st = run_in_child(child_underscore_Exit, NULL);
+    st = run_in_child(child_underscore_Exit, nullptr);
     capture_end(&cap, out, sizeof(out));
     ASSERT(st == 43);
     ASSERT_STR_EQ(out, "");
@@ -660,13 +660,13 @@ static void *exit_from_thread(void *arg)
 {
     (void)arg;
     exit(9);
-    return NULL;
+    return nullptr;
 }
 
 static void h_reenter(void)
 {
     thread_t t;
-    thread_create(&t, exit_from_thread, NULL, NULL);
+    thread_create(&t, exit_from_thread, nullptr, nullptr);
     thread_sleep_ms(150);
     putchar('R', SIOOUT);
 }
@@ -684,7 +684,7 @@ static bool test_exit_reentrancy_guard(void)
     static char out[16];
     capture_t cap;
     ASSERT(capture_begin(&cap, 1));
-    int st = run_in_child(child_reentrant_exit, NULL);
+    int st = run_in_child(child_reentrant_exit, nullptr);
     capture_end(&cap, out, sizeof(out));
 
     ASSERT(st == 7);
@@ -698,7 +698,7 @@ static int child_main_thread_exit(void *arg)
 {
     (void)arg;
     atexit(h_main_exit);
-    thread_exit(NULL);
+    thread_exit(nullptr);
     return 55;
 }
 
@@ -707,7 +707,7 @@ static bool test_thread_exit_main(void)
     static char out[16];
     capture_t cap;
     ASSERT(capture_begin(&cap, 1));
-    int st = run_in_child(child_main_thread_exit, NULL);
+    int st = run_in_child(child_main_thread_exit, nullptr);
     capture_end(&cap, out, sizeof(out));
     ASSERT(st == 0);
     ASSERT_STR_EQ(out, "M");
@@ -725,24 +725,24 @@ static void *noop_thread(void *arg) { return arg; }
 static bool test_thread_validation_and_exit(void)
 {
     thread_t t;
-    ASSERT(thread_create(NULL, noop_thread, NULL, NULL) == THREAD_INVAL);
-    ASSERT(thread_create(&t, NULL, NULL, NULL) == THREAD_INVAL);
+    ASSERT(thread_create(nullptr, noop_thread, nullptr, nullptr) == THREAD_INVAL);
+    ASSERT(thread_create(&t, nullptr, nullptr, nullptr) == THREAD_INVAL);
 
-    ASSERT(thread_join(NULL, NULL) == THREAD_INVAL);
-    ASSERT(thread_join(thread_self(), NULL) == THREAD_DEADLK);
-    ASSERT(thread_detach(NULL) == THREAD_INVAL);
+    ASSERT(thread_join(nullptr, nullptr) == THREAD_INVAL);
+    ASSERT(thread_join(thread_self(), nullptr) == THREAD_DEADLK);
+    ASSERT(thread_detach(nullptr) == THREAD_INVAL);
     ASSERT(thread_detach(thread_self()) == THREAD_INVAL);
-    ASSERT(thread_id(NULL) == 0);
+    ASSERT(thread_id(nullptr) == 0);
     ASSERT(thread_equal(thread_self(), thread_self()));
 
-    ASSERT(thread_create(&t, exit_with_value, (void *)5, NULL) == THREAD_SUCCESS);
-    void *rv = NULL;
+    ASSERT(thread_create(&t, exit_with_value, (void *)5, nullptr) == THREAD_SUCCESS);
+    void *rv = nullptr;
     ASSERT(thread_join(t, &rv) == THREAD_SUCCESS);
     ASSERT(rv == (void *)5);
 
     thread_attr_t at = THREAD_ATTR_INIT;
-    ASSERT(thread_create(&t, noop_thread, NULL, &at) == THREAD_SUCCESS);
-    ASSERT(thread_create(&t, noop_thread, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, noop_thread, nullptr, &at) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, noop_thread, nullptr, nullptr) == THREAD_SUCCESS);
     ASSERT(thread_detach(t) == THREAD_SUCCESS);
     ASSERT(thread_detach(t) == THREAD_INVAL);
     thread_sleep_ms(30);
@@ -751,7 +751,7 @@ static bool test_thread_validation_and_exit(void)
 
 static bool test_tls_key_validation(void)
 {
-    ASSERT(tls_key_create(NULL, NULL) == THREAD_INVAL);
+    ASSERT(tls_key_create(nullptr, nullptr) == THREAD_INVAL);
     ASSERT(tls_key_delete(TLS_KEYS_MAX) == THREAD_INVAL);
     ASSERT(tls_key_delete(TLS_KEYS_MAX + 100) == THREAD_INVAL);
     return true;
@@ -761,7 +761,7 @@ static bool test_thread_stack_too_large(void)
 {
     thread_t t = (thread_t)1;
     thread_attr_t at = { (size_t)1 << 46, false };
-    ASSERT(thread_create(&t, noop_thread, NULL, &at) == THREAD_NOMEM);
+    ASSERT(thread_create(&t, noop_thread, nullptr, &at) == THREAD_NOMEM);
     return true;
 }
 
@@ -774,15 +774,15 @@ static int child_thread_limit(void *arg)
     unsigned long lim[2] = {1, 1};
     long rl = syscall(__NR_setrlimit, 6L /* RLIMIT_NPROC */, (long)lim);
 
-    thread_t t = NULL;
-    int rc = thread_create(&t, noop_thread, NULL, NULL);
+    thread_t t = nullptr;
+    int rc = thread_create(&t, noop_thread, nullptr, nullptr);
 
     syscall(__NR_setresuid, 0L, 0L, 0L);
     if (rl != 0)
         return 77;
     if (rc == THREAD_SUCCESS)
     {
-        thread_join(t, NULL);
+        thread_join(t, nullptr);
         return 78;
     }
     return (rc == THREAD_NOMEM) ? 0 : 79;
@@ -790,7 +790,7 @@ static int child_thread_limit(void *arg)
 
 static bool test_thread_create_clone_failure(void)
 {
-    int st = run_in_child_quiet(child_thread_limit, NULL);
+    int st = run_in_child_quiet(child_thread_limit, nullptr);
     if (st == 77)
     {
         printf("  (skipped: needs root to drop privileges)\n");
@@ -810,7 +810,7 @@ static void *kick_thread(void *arg)
     kick_t *k = (kick_t *)arg;
     thread_sleep_ms(30);
     syscall(__NR_tgkill, k->pid, k->tid, 10L /* SIGUSR1 */);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_sleep_resumes_after_signal(void)
@@ -823,16 +823,16 @@ static bool test_sleep_resumes_after_signal(void)
 
     kick_t k = { sys_getpid(), sys_gettid() };
     thread_t t;
-    ASSERT(thread_create(&t, kick_thread, &k, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, kick_thread, &k, nullptr) == THREAD_SUCCESS);
 
     u64 start = clock_monotonic_ms();
     thread_sleep_ms(120);
     u64 took = clock_monotonic_ms() - start;
-    thread_join(t, NULL);
+    thread_join(t, nullptr);
 
     ASSERT(g_got_usr1 == 1);
     ASSERT(took >= 110);
-    sigaction(SIGUSR1, &old, NULL);
+    sigaction(SIGUSR1, &old, nullptr);
     return true;
 }
 
@@ -840,9 +840,9 @@ static void on_ill(int s) { (void)s; exit(99); }
 
 static void *bad_pointer(void)
 {
-    char *m = (char *)sys_mmap(NULL, (size_t)4 << 20, PROT_READ | PROT_WRITE,
+    char *m = (char *)sys_mmap(nullptr, (size_t)4 << 20, PROT_READ | PROT_WRITE,
                                MAP_PRIVATE | MAP_ANON, -1, 0);
-    return m ? m + ((size_t)2 << 20) + 128 : NULL;
+    return m ? m + ((size_t)2 << 20) + 128 : nullptr;
 }
 
 static int child_free_invalid(void *arg)
@@ -867,13 +867,13 @@ static bool test_alloc_fatal_errors(void)
     capture_t cap;
 
     ASSERT(capture_begin(&cap, 2));
-    int st = run_in_child(child_free_invalid, NULL);
+    int st = run_in_child(child_free_invalid, nullptr);
     capture_end(&cap, err, sizeof(err));
     ASSERT(st == 99);
     ASSERT_STR_EQ(err, "free(): invalid pointer\n");
 
     ASSERT(capture_begin(&cap, 2));
-    st = run_in_child(child_usable_size_invalid, NULL);
+    st = run_in_child(child_usable_size_invalid, nullptr);
     capture_end(&cap, err, sizeof(err));
     ASSERT(st == 99);
     ASSERT_STR_EQ(err, "malloc_usable_size(): invalid pointer\n");
@@ -885,21 +885,21 @@ static int child_out_of_memory(void *arg)
     (void)arg;
     void *held = oom_begin();
 
-    if (malloc(16) != NULL)                return 20;
-    if (malloc((size_t)1 << 40) != NULL)   return 21;
-    if (mutex_create(MUTEX_PLAIN) != NULL) return 22;
+    if (malloc(16) != nullptr)                return 20;
+    if (malloc((size_t)1 << 40) != nullptr)   return 21;
+    if (mutex_create(MUTEX_PLAIN) != nullptr) return 22;
 
     dstr_t d = dstr_new("x");
-    if (d.data != NULL)                    return 23;
-    parr_t p = parr_new(NULL, 0);
-    if (p.data != NULL)                    return 24;
-    iarr_t i = iarr_new(NULL, 0);
-    if (i.data != NULL)                    return 25;
-    map_t m = map_new(8, NULL);
-    if (m.entries != NULL || m.cap != 0)   return 26;
+    if (d.data != nullptr)                    return 23;
+    parr_t p = parr_new(nullptr, 0);
+    if (p.data != nullptr)                    return 24;
+    iarr_t i = iarr_new(nullptr, 0);
+    if (i.data != nullptr)                    return 25;
+    map_t m = map_new(8, nullptr);
+    if (m.entries != nullptr || m.cap != 0)   return 26;
 
     thread_t t;
-    if (thread_create(&t, noop_thread, NULL, NULL) != THREAD_NOMEM) return 27;
+    if (thread_create(&t, noop_thread, nullptr, nullptr) != THREAD_NOMEM) return 27;
 
     oom_end(held);
     return 0;
@@ -907,7 +907,7 @@ static int child_out_of_memory(void *arg)
 
 static bool test_out_of_memory(void)
 {
-    int st_ = run_in_child_quiet(child_out_of_memory, NULL); if (st_ != 0) printf("  oom child status %d\n", st_); ASSERT(st_ == 0);
+    int st_ = run_in_child_quiet(child_out_of_memory, nullptr); if (st_ != 0) printf("  oom child status %d\n", st_); ASSERT(st_ == 0);
     return true;
 }
 #endif /* __linux__ */
@@ -915,8 +915,8 @@ static bool test_out_of_memory(void)
 
 static bool test_map_new_overflow(void)
 {
-    map_t m = map_new((size_t)1 << 62, NULL);
-    ASSERT(m.entries == NULL && m.cap == 0);
+    map_t m = map_new((size_t)1 << 62, nullptr);
+    ASSERT(m.entries == nullptr && m.cap == 0);
     map_free(&m);
     return true;
 }

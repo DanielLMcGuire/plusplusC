@@ -8,7 +8,7 @@ CONSTRUCTOR(MemoryStream)
 {
     SUPER_CTOR(self, Stream);
 
-    self->buffer = NULL;
+    self->buffer = nullptr;
     self->size = 0;
     self->capacity = 0;
     self->position = 0;
@@ -26,7 +26,7 @@ DECONSTRUCTOR(MemoryStream)
     if (self->buffer)
     {
         free(self->buffer);
-        self->buffer = NULL;
+        self->buffer = nullptr;
     }
 
     SUPER_DTOR(self, Stream);
@@ -39,7 +39,7 @@ IMPLEMENT(MemoryStream, i64, read, (void *self, void *buf, size_t n))
 
     __crt_lock_acquire(&this->base.lock);
 
-    if (!buf || n == 0 || this->position >= this->size) goto done;
+    if (buf == nullptr || n == 0 || this->position >= this->size) goto done;
 
     size_t available = this->size - this->position;
     size_t to_read = (n < available) ? n : available;
@@ -60,7 +60,7 @@ IMPLEMENT(MemoryStream, i64, write, (void *self, const void *buf, size_t n))
 
     __crt_lock_acquire(&this->base.lock);
 
-    if (!buf || n == 0) goto done;
+    if (buf == nullptr || n == 0) goto done;
 
     if (n > (size_t)-1 - this->position)
     {
@@ -83,7 +83,7 @@ IMPLEMENT(MemoryStream, i64, write, (void *self, const void *buf, size_t n))
         }
 
         char *new_buffer = (char *)realloc(this->buffer, new_capacity);
-        if (!new_buffer)
+        if (new_buffer == nullptr)
         {
             result = -1;
             goto done;
@@ -158,7 +158,7 @@ IMPLEMENT(MemoryStream, void, close, (void *self))
     if (this->buffer)
     {
         free(this->buffer);
-        this->buffer = NULL;
+        this->buffer = nullptr;
     }
     this->size = 0;
     this->capacity = 0;
@@ -169,7 +169,7 @@ IMPLEMENT(MemoryStream, void, close, (void *self))
 
 const char *mstream_get_buffer(MemoryStream *mstream)
 {
-    if (!mstream)
-        return NULL;
+    if (mstream == nullptr)
+        return nullptr;
     return mstream->buffer;
 }

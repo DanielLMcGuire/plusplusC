@@ -40,7 +40,7 @@ IMPLEMENT(SocketStream, i64, read, (void *self, void *buf, size_t n))
     if (this->fd == SOCK_INVALID)
         return -1;
 
-    if (!buf || n == 0)
+    if (buf == nullptr || n == 0)
         return 0;
 
     i64 r = sock_recv(this->fd, buf, n, 0);
@@ -58,7 +58,7 @@ IMPLEMENT(SocketStream, i64, write, (void *self, const void *buf, size_t n))
     if (this->fd == SOCK_INVALID)
         return -1;
 
-    if (!buf || n == 0)
+    if (buf == nullptr || n == 0)
         return 0;
 
     return sock_send(this->fd, buf, n, 0);
@@ -100,23 +100,23 @@ IMPLEMENT(SocketStream, void, close, (void *self))
 
 Stream *tcp_connect(const char *host, u16 port)
 {
-    if (!host)
-        return NULL;
+    if (host == nullptr)
+        return nullptr;
 
     /* GCOV_EXCL_START */
     if (!sock_init())
-        return NULL;
+        return nullptr;
     /* GCOV_EXCL_STOP */
 
     sock_in_addr_t ip;
 
     if (!sock_inet_pton4(host, &ip))
-        return NULL;
+        return nullptr;
 
     sock_t fd = sock_socket(SOCK_AF_INET, SOCK_STREAM_T, SOCK_IPPROTO_TCP);
 
     if (fd == SOCK_INVALID)
-        return NULL;
+        return nullptr;
 
     sock_addr_in_t addr = sock_make_addr(0, port);
     addr.sin_addr = ip;
@@ -124,15 +124,15 @@ Stream *tcp_connect(const char *host, u16 port)
     if (sock_connect(fd, &addr) != 0)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
 
     SocketStream *ss = NEW(SocketStream);
 
-    if (!ss)
+    if (ss == nullptr)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
 
     ss->fd      = fd;
@@ -145,13 +145,13 @@ SocketStream *tcp_listen(u32 bind_addr, u16 port, i32 backlog)
 {
     /* GCOV_EXCL_START */
     if (!sock_init())
-        return NULL;
+        return nullptr;
     /* GCOV_EXCL_STOP */
 
     sock_t fd = sock_socket(SOCK_AF_INET, SOCK_STREAM_T, SOCK_IPPROTO_TCP);
 
     if (fd == SOCK_INVALID)
-        return NULL;
+        return nullptr;
 
     sock_set_reuseaddr(fd, true);
 
@@ -160,23 +160,23 @@ SocketStream *tcp_listen(u32 bind_addr, u16 port, i32 backlog)
     if (sock_bind(fd, &addr) != 0)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
 
     /* GCOV_EXCL_START */
     if (sock_listen(fd, backlog) != 0)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
     /* GCOV_EXCL_STOP */
 
     SocketStream *ss = NEW(SocketStream);
 
-    if (!ss)
+    if (ss == nullptr)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
 
     ss->fd      = fd;
@@ -187,20 +187,20 @@ SocketStream *tcp_listen(u32 bind_addr, u16 port, i32 backlog)
 
 Stream *tcp_accept(SocketStream *listener, sock_addr_in_t *out_peer)
 {
-    if (!listener || listener->fd == SOCK_INVALID)
-        return NULL;
+    if (listener == nullptr || listener->fd == SOCK_INVALID)
+        return nullptr;
 
     sock_t fd = sock_accept(listener->fd, out_peer);
 
     if (fd == SOCK_INVALID)
-        return NULL;
+        return nullptr;
 
     SocketStream *ss = NEW(SocketStream);
 
-    if (!ss)
+    if (ss == nullptr)
     {
         sock_close(fd);
-        return NULL;
+        return nullptr;
     }
 
     ss->fd      = fd;

@@ -55,9 +55,9 @@ static bool test_signal_invalid_arguments(void)
 
     sigaction_t act = {0};
     act.sa_handler = count_handler;
-    ASSERT(sigaction(SIGKILL, &act, NULL) == -1);
-    ASSERT(sigaction(0, &act, NULL) == -1);
-    ASSERT(sigaction(NSIG, &act, NULL) == -1);
+    ASSERT(sigaction(SIGKILL, &act, nullptr) == -1);
+    ASSERT(sigaction(0, &act, nullptr) == -1);
+    ASSERT(sigaction(NSIG, &act, nullptr) == -1);
 
     ASSERT(raise(1000) == -1);
     return true;
@@ -76,21 +76,21 @@ static bool test_sigaction_query_and_flags(void)
     ASSERT(old.sa_handler == SIG_DFL);
 
     sigaction_t cur = {0};
-    ASSERT(sigaction(SIGUSR2, NULL, &cur) == 0);
+    ASSERT(sigaction(SIGUSR2, nullptr, &cur) == 0);
     ASSERT(cur.sa_handler == count_handler);
     ASSERT((cur.sa_flags & SA_RESTART) != 0);
     ASSERT((cur.sa_flags & SA_NODEFER) != 0);
     ASSERT(sigismember(&cur.sa_mask, SIGUSR2) == 1);
     ASSERT(sigismember(&cur.sa_mask, SIGUSR1) == 0);
 
-    ASSERT(sigaction(SIGUSR2, NULL, NULL) == 0);
+    ASSERT(sigaction(SIGUSR2, nullptr, nullptr) == 0);
 
     g_sig_count = 0;
     act.sa_flags = SA_RESETHAND;
-    ASSERT(sigaction(SIGUSR2, &act, NULL) == 0);
+    ASSERT(sigaction(SIGUSR2, &act, nullptr) == 0);
     ASSERT(raise(SIGUSR2) == 0);
     ASSERT(g_sig_count == 1);
-    ASSERT(sigaction(SIGUSR2, NULL, &cur) == 0);
+    ASSERT(sigaction(SIGUSR2, nullptr, &cur) == 0);
     ASSERT(cur.sa_handler == SIG_DFL);
     return true;
 }
@@ -118,9 +118,9 @@ static bool test_sigset_operations(void)
     ASSERT(sigismember(&s, 65) == 0);
     ASSERT(sigismember(&s, -3) == 0);
 
-    sigemptyset(NULL);
-    sigaddset(NULL, 1);
-    ASSERT(sigismember(NULL, 1) == 0);
+    sigemptyset(nullptr);
+    sigaddset(nullptr, 1);
+    ASSERT(sigismember(nullptr, 1) == 0);
     return true;
 }
 
@@ -154,8 +154,8 @@ static bool test_sock_inet_pton4(void)
     ASSERT(sock_inet_pton4("255.255.255.255", &a) && a.s_addr == 0xffffffffu);
     ASSERT(sock_inet_pton4("127.0.0.1", &a) && sock_ntohl(a.s_addr) == SOCK_INADDR_LOOPBACK);
 
-    ASSERT(!sock_inet_pton4(NULL, &a));
-    ASSERT(!sock_inet_pton4("1.2.3.4", NULL));
+    ASSERT(!sock_inet_pton4(nullptr, &a));
+    ASSERT(!sock_inet_pton4("1.2.3.4", nullptr));
     ASSERT(!sock_inet_pton4("", &a));
     ASSERT(!sock_inet_pton4("256.1.1.1", &a));
     ASSERT(!sock_inet_pton4("0001.1.1.1", &a));
@@ -173,7 +173,7 @@ static bool test_sock_inet_addr_and_ntop(void)
 {
     ASSERT(sock_ntohl(sock_inet_addr("10.20.30.40")) == 0x0a141e28u);
     ASSERT(sock_inet_addr("garbage") == SOCK_INADDR_NONE);
-    ASSERT(sock_inet_addr(NULL) == SOCK_INADDR_NONE);
+    ASSERT(sock_inet_addr(nullptr) == SOCK_INADDR_NONE);
 
     sock_in_addr_t a;
     ASSERT(sock_inet_pton4("192.168.1.200", &a));
@@ -184,8 +184,8 @@ static bool test_sock_inet_addr_and_ntop(void)
     char tiny[8];
     ASSERT(!sock_inet_ntop4(&a, tiny, sizeof(tiny)));
     ASSERT(!sock_inet_ntop4(&a, buf, 0));
-    ASSERT(!sock_inet_ntop4(NULL, buf, sizeof(buf)));
-    ASSERT(!sock_inet_ntop4(&a, NULL, sizeof(buf)));
+    ASSERT(!sock_inet_ntop4(nullptr, buf, sizeof(buf)));
+    ASSERT(!sock_inet_ntop4(&a, nullptr, sizeof(buf)));
     return true;
 }
 
@@ -262,7 +262,7 @@ static bool test_sock_tcp_roundtrip(void)
 
     sock_t cli2 = sock_socket(SOCK_AF_INET, SOCK_STREAM_T, SOCK_IPPROTO_TCP);
     ASSERT(sock_connect(cli2, &to) == 0);
-    sock_t conn2 = sock_accept(srv, NULL);
+    sock_t conn2 = sock_accept(srv, nullptr);
     ASSERT(conn2 != SOCK_INVALID);
 
     ASSERT(sock_shutdown(cli, SOCK_SHUT_WR) == 0);
@@ -296,10 +296,10 @@ static bool test_sock_udp_roundtrip(void)
     ASSERT(from.sin_port == to_b.sin_port);
 
     ASSERT(sock_sendto(a, "xy", 2, 0, &to_b) == 2);
-    ASSERT(sock_recvfrom(b, buf, sizeof(buf), 0, NULL) == 2);
+    ASSERT(sock_recvfrom(b, buf, sizeof(buf), 0, nullptr) == 2);
 
     int v = 0;
-    ASSERT(sock_getsockopt(a, SOCK_SOL_SOCKET, SOCK_SO_BROADCAST, &v, NULL) == 0);
+    ASSERT(sock_getsockopt(a, SOCK_SOL_SOCKET, SOCK_SO_BROADCAST, &v, nullptr) == 0);
 
     ASSERT(sock_close(a) == 0);
     ASSERT(sock_close(b) == 0);
@@ -366,7 +366,7 @@ static void *touch_error_slot(void *arg)
 {
     (void)arg;
     (void)sock_last_error();
-    return NULL;
+    return nullptr;
 }
 
 static int child_sock_slot_overflow(void *arg)
@@ -375,9 +375,9 @@ static int child_sock_slot_overflow(void *arg)
     for (int i = 0; i < 80; i++)
     {
         thread_t t;
-        if (thread_create(&t, touch_error_slot, NULL, NULL) != THREAD_SUCCESS)
+        if (thread_create(&t, touch_error_slot, nullptr, nullptr) != THREAD_SUCCESS)
             return 10;
-        thread_join(t, NULL);
+        thread_join(t, nullptr);
     }
 
     sock_t bad = (sock_t)-1;
@@ -388,22 +388,22 @@ static int child_sock_slot_overflow(void *arg)
 
 static bool test_sock_error_slot_overflow(void)
 {
-    ASSERT(run_in_child_quiet(child_sock_slot_overflow, NULL) == 0);
+    ASSERT(run_in_child_quiet(child_sock_slot_overflow, nullptr) == 0);
     return true;
 }
 
 static bool test_socketstream_loopback(void)
 {
     SocketStream *listener = tcp_listen(SOCK_INADDR_LOOPBACK, 0, 4);
-    ASSERT(listener != NULL);
+    ASSERT(listener != nullptr);
     u16 port = bound_port(listener->fd);
     ASSERT(port != 0);
 
     Stream *client = tcp_connect("127.0.0.1", port);
-    ASSERT(client != NULL);
+    ASSERT(client != nullptr);
     sock_addr_in_t peer;
     Stream *server = tcp_accept(listener, &peer);
-    ASSERT(server != NULL);
+    ASSERT(server != nullptr);
     ASSERT(sock_ntohl(peer.sin_addr.s_addr) == SOCK_INADDR_LOOPBACK);
 
     char buf[32];
@@ -413,9 +413,9 @@ static bool test_socketstream_loopback(void)
     ASSERT(CALL1(server, fprint, "reply") == 5);
     ASSERT(CALL2(client, read, buf, sizeof(buf)) == 5);
 
-    ASSERT(CALL2(client, read, NULL, 4) == 0);
+    ASSERT(CALL2(client, read, nullptr, 4) == 0);
     ASSERT(CALL2(client, read, buf, 0) == 0);
-    ASSERT(CALL2(client, write, NULL, 4) == 0);
+    ASSERT(CALL2(client, write, nullptr, 4) == 0);
     ASSERT(CALL2(client, write, "x", 0) == 0);
 
     ASSERT(CALL2(client, seek, 0, FS_SEEK_SET) == -1);
@@ -438,27 +438,27 @@ static bool test_socketstream_loopback(void)
 
 static bool test_socketstream_failures(void)
 {
-    ASSERT(tcp_connect(NULL, 80) == NULL);
-    ASSERT(tcp_connect("not-an-ip", 80) == NULL);
-    ASSERT(tcp_accept(NULL, NULL) == NULL);
+    ASSERT(tcp_connect(nullptr, 80) == nullptr);
+    ASSERT(tcp_connect("not-an-ip", 80) == nullptr);
+    ASSERT(tcp_accept(nullptr, nullptr) == nullptr);
 
     SocketStream *tmp = tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1);
-    ASSERT(tmp != NULL);
+    ASSERT(tmp != nullptr);
     u16 port = bound_port(tmp->fd);
     REMOVE(tmp);
-    ASSERT(tcp_connect("127.0.0.1", port) == NULL);
+    ASSERT(tcp_connect("127.0.0.1", port) == nullptr);
 
     SocketStream *a = tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1);
-    ASSERT(a != NULL);
-    ASSERT(tcp_listen(SOCK_INADDR_LOOPBACK, bound_port(a->fd), 1) == NULL);
+    ASSERT(a != nullptr);
+    ASSERT(tcp_listen(SOCK_INADDR_LOOPBACK, bound_port(a->fd), 1) == nullptr);
 
     CALL0(AS(Stream, a), close);
-    ASSERT(tcp_accept(a, NULL) == NULL);
+    ASSERT(tcp_accept(a, nullptr) == nullptr);
 
     SocketStream *dg = NEW(SocketStream);
     dg->fd = sock_socket(SOCK_AF_INET, SOCK_DGRAM_T, SOCK_IPPROTO_UDP);
     dg->owns_fd = true;
-    ASSERT(tcp_accept(dg, NULL) == NULL);
+    ASSERT(tcp_accept(dg, nullptr) == nullptr);
 
     SocketStream *none = NEW(SocketStream);
     char b[4];
@@ -485,9 +485,9 @@ static int child_socketstream_oom(void *arg)
     if (sock_connect(pending, &to) != 0) return 11;
 
     void *held = oom_begin();
-    if (tcp_connect("127.0.0.1", port) != NULL)             return 20;
-    if (tcp_accept(listener, NULL) != NULL)                 return 21;
-    if (tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1) != NULL)     return 22;
+    if (tcp_connect("127.0.0.1", port) != nullptr)             return 20;
+    if (tcp_accept(listener, nullptr) != nullptr)                 return 21;
+    if (tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1) != nullptr)     return 22;
     oom_end(held);
 
     sock_close(pending);
@@ -497,7 +497,7 @@ static int child_socketstream_oom(void *arg)
 
 static bool test_socketstream_out_of_memory(void)
 {
-    int st = run_in_child_quiet(child_socketstream_oom, NULL);
+    int st = run_in_child_quiet(child_socketstream_oom, nullptr);
     if (st != 0)
         printf("  oom child status %d\n", st);
     ASSERT(st == 0);
@@ -519,8 +519,8 @@ static int child_no_descriptors(void *arg)
     int rc = 0;
     if (sock_socket(SOCK_AF_INET, SOCK_STREAM_T, SOCK_IPPROTO_TCP) != SOCK_INVALID) rc = 11;
     else if (sock_last_error() == 0)                                  rc = 12;
-    else if (tcp_connect("127.0.0.1", 1) != NULL)                     rc = 13;
-    else if (tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1) != NULL)          rc = 14;
+    else if (tcp_connect("127.0.0.1", 1) != nullptr)                     rc = 13;
+    else if (tcp_listen(SOCK_INADDR_LOOPBACK, 0, 1) != nullptr)          rc = 14;
 
     syscall(__NR_setrlimit, 7L, (long)saved);
     return rc;
@@ -528,7 +528,7 @@ static int child_no_descriptors(void *arg)
 
 static bool test_socketstream_descriptor_exhaustion(void)
 {
-    ASSERT(run_in_child_quiet(child_no_descriptors, NULL) == 0);
+    ASSERT(run_in_child_quiet(child_no_descriptors, nullptr) == 0);
     return true;
 }
 #endif

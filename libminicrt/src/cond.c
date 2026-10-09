@@ -25,7 +25,7 @@ static void mutex_reacquire_after_wait(mutex_t *mtx, u32 saved_count)
 
 int cond_init(cond_t *cv)
 {
-    if (!cv) return COND_ERROR;
+    if (cv == nullptr) return COND_ERROR;
     atomic_u32_init(&cv->seq, 0);
     return COND_SUCCESS;
 }
@@ -34,14 +34,14 @@ int cond_destroy(cond_t *cv) { (void)cv; return COND_SUCCESS; }
 
 static int cond_wait_impl(cond_t *cv, mutex_t *mtx, const xxc_timespec_t *timeout)
 {
-    if (!cv || !mtx) return COND_ERROR;
+    if (cv == nullptr || !mtx) return COND_ERROR;
     if ((long)thread_current_id() != mtx->owner_tid) return COND_ERROR;
 
     u32 seq = atomic_u32_load_explicit(&cv->seq, ATOMIC_ACQUIRE);
     u32 saved = mutex_release_for_wait(mtx);
     __crt_lock_release(&mtx->lock);
 
-    long r = sys_futex((int *)&cv->seq, FUTEX_WAIT_PRIVATE, (int)seq, timeout, NULL, 0);
+    long r = sys_futex((int *)&cv->seq, FUTEX_WAIT_PRIVATE, (int)seq, timeout, nullptr, 0);
 
     __crt_lock_acquire(&mtx->lock);
     mutex_reacquire_after_wait(mtx, saved);
@@ -51,7 +51,7 @@ static int cond_wait_impl(cond_t *cv, mutex_t *mtx, const xxc_timespec_t *timeou
 
 int cond_wait(cond_t *cv, mutex_t *mtx)
 {
-    return cond_wait_impl(cv, mtx, NULL);
+    return cond_wait_impl(cv, mtx, nullptr);
 }
 
 int cond_timedwait_ms(cond_t *cv, mutex_t *mtx, u32 ms)
@@ -64,23 +64,23 @@ int cond_timedwait_ms(cond_t *cv, mutex_t *mtx, u32 ms)
 
 void cond_signal(cond_t *cv)
 {
-    if (!cv) return;
+    if (cv == nullptr) return;
     atomic_u32_fetch_add_explicit(&cv->seq, 1, ATOMIC_RELEASE);
-    sys_futex((int *)&cv->seq, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+    sys_futex((int *)&cv->seq, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
 }
 
 void cond_broadcast(cond_t *cv)
 {
-    if (!cv) return;
+    if (cv == nullptr) return;
     atomic_u32_fetch_add_explicit(&cv->seq, 1, ATOMIC_RELEASE);
-    sys_futex((int *)&cv->seq, FUTEX_WAKE_PRIVATE, (int)0x7fffffff, NULL, NULL, 0);
+    sys_futex((int *)&cv->seq, FUTEX_WAKE_PRIVATE, (int)0x7fffffff, nullptr, nullptr, 0);
 }
 
 #elif defined(_WIN32)
 
 int cond_init(cond_t *cv)
 {
-    if (!cv) return COND_ERROR;
+    if (cv == nullptr) return COND_ERROR;
     InitializeConditionVariable(&cv->cv);
     return COND_SUCCESS;
 }
@@ -89,7 +89,7 @@ int cond_destroy(cond_t *cv) { (void)cv; return COND_SUCCESS; }
 
 static int cond_wait_impl(cond_t *cv, mutex_t *mtx, DWORD timeout_ms)
 {
-    if (!cv || !mtx) return COND_ERROR;
+    if (cv == nullptr || !mtx) return COND_ERROR;
     if ((long)thread_current_id() != mtx->owner_tid) return COND_ERROR;
 
     u32 saved = mutex_release_for_wait(mtx);

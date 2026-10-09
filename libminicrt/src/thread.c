@@ -18,7 +18,7 @@ static crt_lock_t g_key_lock = CRT_LOCK_INIT;
 
 int tls_key_create(tls_key_t *key, void (*destructor)(void *))
 {
-    if (!key)
+    if (key == nullptr)
         return THREAD_INVAL;
 
     int rc = THREAD_NOMEM;
@@ -47,7 +47,7 @@ int tls_key_delete(tls_key_t key)
     if (g_keys[key].used)
     {
         g_keys[key].used = false;
-        g_keys[key].dtor = NULL;
+        g_keys[key].dtor = nullptr;
         atomic_u32_fetch_add(&g_keys[key].gen, 1);
         rc = THREAD_SUCCESS;
     }
@@ -73,10 +73,10 @@ static inline size_t align_up_sz(size_t v, size_t a)
 
 void *tls_get(tls_key_t key)
 {
-    if (key >= TLS_KEYS_MAX) return NULL;
+    if (key >= TLS_KEYS_MAX) return nullptr;
     struct xxc_thread *t = __xxc_self;
     if (t->tls_gens[key] != atomic_u32_load_explicit(&g_keys[key].gen, ATOMIC_ACQUIRE))
-        return NULL;
+        return nullptr;
     return t->tls_values[key];
 }
 
@@ -96,7 +96,7 @@ static void run_tls_destructors(struct xxc_thread *t)
         bool ran = false;
         for (u32 k = 0; k < TLS_KEYS_MAX; k++)
         {
-            void (*dtor)(void *) = NULL;
+            void (*dtor)(void *) = nullptr;
             __crt_lock_acquire(&g_key_lock);
             if (g_keys[k].used && t->tls_gens[k] == atomic_u32_load(&g_keys[k].gen))
                 dtor = g_keys[k].dtor;
@@ -105,7 +105,7 @@ static void run_tls_destructors(struct xxc_thread *t)
             void *v = t->tls_values[k];
             if (dtor && v)
             {
-                t->tls_values[k] = NULL;
+                t->tls_values[k] = nullptr;
                 dtor(v);
                 ran = true;
             }
@@ -127,7 +127,7 @@ static XXC_NORETURN void thread_finish(struct xxc_thread *t, void *retval)
         sys_exit_thread(0);
 
     u64 all = ~(u64)0;
-    (void)sys_rt_sigprocmask(0, &all, NULL, 8);
+    (void)sys_rt_sigprocmask(0, &all, nullptr, 8);
     (void)sys_set_tid_address(&g_dead_tid);
     __xxc_unmapself(t->map_base, t->map_size);
 }
@@ -141,7 +141,7 @@ static int thread_entry(void *p)
 
 int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t *attr)
 {
-    if (!out || !fn)
+    if (out == nullptr|| fn == nullptr)
         return THREAD_INVAL;
 
     size_t stack = (attr && attr->stack_size) ? attr->stack_size : THREAD_DEFAULT_STACK_SIZE;
@@ -152,8 +152,8 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
     size_t desc_sz  = align_up_sz(sizeof(struct xxc_thread), 64);
     size_t total    = align_up_sz(XXC_THREAD_GUARD + stack + tls_area + desc_sz, 65536);
 
-    char *base = (char *)sys_mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!base)
+    char *base = (char *)sys_mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (base == nullptr)
         return THREAD_NOMEM;
     (void)sys_mprotect(base, XXC_THREAD_GUARD, PROT_NONE);
 
@@ -179,11 +179,11 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
                 XXC_CLONE_THREAD | XXC_CLONE_SYSVSEM | XXC_CLONE_SETTLS |
                 XXC_CLONE_PARENT_SETTID | XXC_CLONE_CHILD_CLEARTID;
 
-    *out = detached ? NULL : t;
+    *out = detached ? nullptr : t;
     long r = __xxc_clone(thread_entry, sp, flags, t, (int *)&t->tid, tls_arg, (int *)&t->tid);
     if (r < 0)
     {
-        *out = NULL;
+        *out = nullptr;
         sys_munmap(base, total);
         return (r == -XXC_ENOMEM || r == -XXC_EAGAIN) ? THREAD_NOMEM : THREAD_ERROR;
     }
@@ -196,7 +196,7 @@ static void thread_reap(struct xxc_thread *t, void **retval)
     {
         i32 tid = atomic_i32_load_explicit(&t->tid, ATOMIC_ACQUIRE);
         if (tid == 0) break;
-        sys_futex((int *)&t->tid, 0, tid, NULL, NULL, 0);
+        sys_futex((int *)&t->tid, 0, tid, nullptr, nullptr, 0);
     }
     if (retval) *retval = t->retval;
     void *base = t->map_base;
@@ -230,7 +230,7 @@ static XXC_NORETURN void thread_entry(void *p)
 
 int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t *attr)
 {
-    if (!out || !fn)
+    if (out == nullptr || fn == nullptr)
         return THREAD_INVAL;
 
     size_t stack = (attr && attr->stack_size) ? attr->stack_size : THREAD_DEFAULT_STACK_SIZE;
@@ -241,8 +241,8 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
     size_t desc_sz  = align_up_sz(sizeof(struct xxc_thread), 64);
     size_t total    = align_up_sz(XXC_THREAD_GUARD + stack + tls_area + desc_sz, 65536);
 
-    char *base = (char *)sys_mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!base)
+    char *base = (char *)sys_mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (base == nullptr)
         return THREAD_NOMEM;
     (void)sys_mprotect(base, XXC_THREAD_GUARD, PROT_NONE);
 
@@ -269,11 +269,11 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
     pr.child_tid  = (long *)&t->ktid;
     pr.parent_tid = (long *)&t->ktid;
 
-    *out = detached ? NULL : t;
+    *out = detached ? nullptr : t;
     long r = sys_thr_new(&pr);
     if (r < 0)
     {
-        *out = NULL;
+        *out = nullptr;
         sys_munmap(base, total);
         return (r == -XXC_ENOMEM || r == -XXC_EAGAIN) ? THREAD_NOMEM : THREAD_ERROR;
     }
@@ -289,7 +289,7 @@ static void thread_reap(struct xxc_thread *t, void **retval)
     {
         i32 st = (i32)__atomic_load_n((volatile i32 *)&t->exit_state, __ATOMIC_ACQUIRE);
         if (st == 1) break;
-        sys_futex((int *)&t->exit_state, 0, st, NULL, NULL, 0);
+        sys_futex((int *)&t->exit_state, 0, st, nullptr, nullptr, 0);
     }
     if (retval) *retval = t->retval;
     void *base = t->map_base;
@@ -317,7 +317,7 @@ int thread_detach(thread_t t)
         return THREAD_SUCCESS;
     if (expect == XXC_THREAD_EXITED)
     {
-        thread_reap(t, NULL);
+        thread_reap(t, nullptr);
         return THREAD_SUCCESS;
     }
     return THREAD_INVAL;
@@ -392,7 +392,7 @@ thread_t thread_self(void)
     if (!t)
     {
         t = (struct xxc_thread *)calloc(1, sizeof(*t));
-        if (!t) return NULL;
+        if (!t) return nullptr;
         t->tid = GetCurrentThreadId();
         atomic_i32_init(&t->state, WT_DETACHED);
         TlsSetValue(idx, t);
@@ -402,10 +402,10 @@ thread_t thread_self(void)
 
 void *tls_get(tls_key_t key)
 {
-    if (key >= TLS_KEYS_MAX) return NULL;
+    if (key >= TLS_KEYS_MAX) return nullptr;
     struct xxc_thread *t = thread_self();
     if (!t || t->tls_gens[key] != atomic_u32_load_explicit(&g_keys[key].gen, ATOMIC_ACQUIRE))
-        return NULL;
+        return nullptr;
     return t->tls_values[key];
 }
 
@@ -426,7 +426,7 @@ static void run_tls_destructors(struct xxc_thread *t)
         bool ran = false;
         for (u32 k = 0; k < TLS_KEYS_MAX; k++)
         {
-            void (*dtor)(void *) = NULL;
+            void (*dtor)(void *) = nullptr;
             __crt_lock_acquire(&g_key_lock);
             if (g_keys[k].used && t->tls_gens[k] == atomic_u32_load(&g_keys[k].gen))
                 dtor = g_keys[k].dtor;
@@ -435,7 +435,7 @@ static void run_tls_destructors(struct xxc_thread *t)
             void *v = t->tls_values[k];
             if (dtor && v)
             {
-                t->tls_values[k] = NULL;
+                t->tls_values[k] = nullptr;
                 dtor(v);
                 ran = true;
             }
@@ -478,7 +478,7 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
     t->arg = arg;
     atomic_i32_init(&t->state, detached ? WT_DETACHED : WT_JOINABLE);
 
-    t->handle = CreateThread(NULL, stack, thread_entry, t,
+    t->handle = CreateThread(nullptr, stack, thread_entry, t,
                              CREATE_SUSPENDED | (stack ? STACK_SIZE_PARAM_IS_A_RESERVATION : 0), &t->tid);
     if (!t->handle)
     {
@@ -487,13 +487,13 @@ int thread_create(thread_t *out, thread_fn_t fn, void *arg, const thread_attr_t 
     }
 
     HANDLE h = t->handle;
-    *out = detached ? NULL : t;
+    *out = detached ? nullptr : t;
     if (ResumeThread(h) == (DWORD)-1)
     {
         TerminateThread(h, 0);
         CloseHandle(h);
         free(t);
-        *out = NULL;
+        *out = nullptr;
         return THREAD_ERROR;
     }
     if (detached)

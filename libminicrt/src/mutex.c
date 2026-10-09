@@ -39,7 +39,7 @@ static inline long mutex_current_tid(void)
 
 int mutex_init(mutex_t *mtx, int type)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return MUTEX_ERROR;
 
     if (type != MUTEX_PLAIN && type != MUTEX_RECURSIVE && type != MUTEX_ERRORCHECK)
@@ -55,7 +55,7 @@ int mutex_init(mutex_t *mtx, int type)
 
 int mutex_destroy(mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return MUTEX_ERROR;
 
     if (crt_atomic_load_long(&mtx->owner_tid) != 0 || mtx->count != 0)
@@ -69,13 +69,13 @@ int mutex_destroy(mutex_t *mtx)
 mutex_t *mutex_create(int type)
 {
     mutex_t *mtx = (mutex_t *)malloc(sizeof(mutex_t));
-    if (!mtx)
-        return NULL;
+    if (mtx == nullptr)
+        return nullptr;
 
     if (mutex_init(mtx, type) != MUTEX_SUCCESS)
     {
         free(mtx);
-        return NULL;
+        return nullptr;
     }
 
     return mtx;
@@ -83,7 +83,7 @@ mutex_t *mutex_create(int type)
 
 void mutex_free(mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return;
 
     mutex_destroy(mtx);
@@ -92,7 +92,7 @@ void mutex_free(mutex_t *mtx)
 
 int mutex_lock(mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return MUTEX_ERROR;
 
     long tid = mutex_current_tid();
@@ -123,7 +123,7 @@ int mutex_lock(mutex_t *mtx)
 
 int mutex_trylock(mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return MUTEX_ERROR;
 
     long tid = mutex_current_tid();
@@ -156,7 +156,7 @@ int mutex_trylock(mutex_t *mtx)
 
 int mutex_unlock(mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return MUTEX_ERROR;
 
     long tid = mutex_current_tid();
@@ -179,7 +179,7 @@ int mutex_unlock(mutex_t *mtx)
 
 bool mutex_is_locked(const mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return false;
 
     return crt_atomic_load_long(&mtx->owner_tid) != 0;
@@ -187,7 +187,7 @@ bool mutex_is_locked(const mutex_t *mtx)
 
 bool mutex_is_owned_by_current_thread(const mutex_t *mtx)
 {
-    if (!mtx)
+    if (mtx == nullptr)
         return false;
 
     return crt_atomic_load_long(&mtx->owner_tid) == mutex_current_tid();

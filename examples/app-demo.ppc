@@ -50,7 +50,7 @@ int program(parr_t csArgs)
 #else
     Demo *demo = NEW(Demo);
 #endif
-    if (!demo)
+    if (demo == nullptr)
         return 1;
 
     Application *app = AS(Application, demo);

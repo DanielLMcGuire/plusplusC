@@ -9,7 +9,7 @@
 
 int sem_init(sem_t *sem, u32 initial)
 {
-    if (!sem) return SEM_ERROR;
+    if (sem == nullptr) return SEM_ERROR;
     atomic_i32_init(&sem->count, (i32)initial);
     return SEM_SUCCESS;
 }
@@ -33,24 +33,24 @@ static int try_take(sem_t *sem, i32 *cur)
 
 static int sem_wait_impl(sem_t *sem, const xxc_timespec_t *timeout)
 {
-    if (!sem) return SEM_ERROR;
+    if (sem == nullptr) return SEM_ERROR;
     i32 cur;
     for (;;)
     {
         if (try_take(sem, &cur)) return SEM_SUCCESS;
-        long r = sys_futex((int *)&sem->count, FUTEX_WAIT_PRIVATE, cur, timeout, NULL, 0);
+        long r = sys_futex((int *)&sem->count, FUTEX_WAIT_PRIVATE, cur, timeout, nullptr, 0);
         if (r == -XXC_ETIMEDOUT) return SEM_TIMEDOUT;
     }
 }
 
 int sem_wait(sem_t *sem)
 {
-    return sem_wait_impl(sem, NULL);
+    return sem_wait_impl(sem, nullptr);
 }
 
 int sem_trywait(sem_t *sem)
 {
-    if (!sem) return SEM_ERROR;
+    if (sem == nullptr) return SEM_ERROR;
     i32 cur;
     return try_take(sem, &cur) ? SEM_SUCCESS : SEM_BUSY;
 }
@@ -65,9 +65,9 @@ int sem_timedwait_ms(sem_t *sem, u32 ms)
 
 int sem_post(sem_t *sem)
 {
-    if (!sem) return SEM_ERROR;
+    if (sem == nullptr) return SEM_ERROR;
     atomic_i32_fetch_add_explicit(&sem->count, 1, ATOMIC_RELEASE);
-    sys_futex((int *)&sem->count, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+    sys_futex((int *)&sem->count, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
     return SEM_SUCCESS;
 }
 
@@ -75,22 +75,22 @@ int sem_post(sem_t *sem)
 
 int sem_init(sem_t *sem, u32 initial)
 {
-    if (!sem) return SEM_ERROR;
-    sem->handle = CreateSemaphoreW(NULL, (LONG)initial, 0x7fffffffL, NULL);
+    if (sem == nullptr) return SEM_ERROR;
+    sem->handle = CreateSemaphoreW(nullptr, (LONG)initial, 0x7fffffffL, nullptr);
     return sem->handle ? SEM_SUCCESS : SEM_ERROR;
 }
 
 int sem_destroy(sem_t *sem)
 {
-    if (!sem || !sem->handle) return SEM_ERROR;
+    if (sem == nullptr || sem->handle == nullptr) return SEM_ERROR;
     CloseHandle(sem->handle);
-    sem->handle = NULL;
+    sem->handle = nullptr;
     return SEM_SUCCESS;
 }
 
 static int sem_wait_impl(sem_t *sem, DWORD timeout_ms)
 {
-    if (!sem || !sem->handle) return SEM_ERROR;
+    if (sem == nullptr || sem->handle == nullptr) return SEM_ERROR;
     DWORD r = WaitForSingleObject(sem->handle, timeout_ms);
     if (r == WAIT_OBJECT_0) return SEM_SUCCESS;
     if (r == WAIT_TIMEOUT)  return SEM_TIMEDOUT;
@@ -103,8 +103,8 @@ int sem_timedwait_ms(sem_t *sem, u32 ms) { return sem_wait_impl(sem, (DWORD)ms);
 
 int sem_post(sem_t *sem)
 {
-    if (!sem || !sem->handle) return SEM_ERROR;
-    return ReleaseSemaphore(sem->handle, 1, NULL) ? SEM_SUCCESS : SEM_ERROR;
+    if (sem == nullptr || sem->handle == nullptr) return SEM_ERROR;
+    return ReleaseSemaphore(sem->handle, 1, nullptr) ? SEM_SUCCESS : SEM_ERROR;
 }
 
 #endif

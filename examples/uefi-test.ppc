@@ -37,9 +37,9 @@ DECONSTRUCTOR(IoTest) { SUPER_DTOR(self, Application); }
 
 static bool file_starts_with_str(const char *path, const char *prefix)
 {
-    if (!path || !prefix) return false;
+    if (path == nullptr || prefix == nullptr) return false;
     SCOPED Stream *f = fopen_str(path, "r");
-    if (!f) return false;
+    if (f == nullptr) return false;
     char buf[64] = {0};
     size_t n = strlen(prefix);
     i64 got = CALL2(f, read, buf, n);
@@ -48,7 +48,7 @@ static bool file_starts_with_str(const char *path, const char *prefix)
 
 static bool file_starts_with(FSPath *path, const char *prefix)
 {
-    if (!path || !prefix) return false;
+    if (path == nullptr || prefix == nullptr) return false;
     dstr_t pathStr = CALL0(path, data);
     bool ok = file_starts_with_str(pathStr.data, prefix);
     dstr_free(&pathStr);
@@ -85,15 +85,15 @@ static void test_files(void)
     const char path[] = "io_test.txt";
 
     Stream *f = fopen_str(path, "w");
-    CHECK(f != NULL);
-    if (!f) return;
+    CHECK(f != nullptr);
+    if (f == nullptr) return;
     CALL1(f, fprintln, "hello from ++C");
     CALL2(f, fprintf, "n=%d\n", 42);
     CALL1(f, fprint, "tail");
     REMOVE(f);
 
     f = fopen_str(path, "r");
-    CHECK(f != NULL);
+    CHECK(f != nullptr);
     freadline(f, &line);
     CHECK(strcmp(line.data, "hello from ++C") == 0);
     dstr_free(&line);
@@ -111,7 +111,7 @@ static void test_files(void)
     REMOVE(f);
 
     f = fopen_str(path, "a");
-    CHECK(f != NULL);
+    CHECK(f != nullptr);
     CALL1(f, fprintln, "+appended");
     REMOVE(f);
     f = fopen_str(path, "r");
@@ -119,7 +119,7 @@ static void test_files(void)
     REMOVE(f);
 
     f = fopen_str(path, "r+");
-    CHECK(f != NULL);
+    CHECK(f != nullptr);
     CALL2(f, seek, 0, FS_SEEK_SET);
     CALL1(f, fprint, "HELLO");
     REMOVE(f);
@@ -133,12 +133,12 @@ static void test_files(void)
     CHECK(CALL2(f, seek, 0, FS_SEEK_END) == 0);
     REMOVE(f);
 
-    CHECK(fopen_str("no_such_file.txt", "r") == NULL);
-    CHECK(fopen_str("no_such_dir/x.txt", "w") == NULL);
-    CHECK(fopen_str(path, "z") == NULL);
+    CHECK(fopen_str("no_such_file.txt", "r") == nullptr);
+    CHECK(fopen_str("no_such_dir/x.txt", "w") == nullptr);
+    CHECK(fopen_str(path, "z") == nullptr);
 
     f = fopen_str("EFI/BOOT/BOOTX64.EFI", "r");
-    CHECK(f != NULL);
+    CHECK(f != nullptr);
     if (f)
     {
         CHECK(CALL2(f, seek, 0, FS_SEEK_END) > 1000);
@@ -152,10 +152,10 @@ static void test_files(void)
     dstr_free(&nm);
     CHECK(CALL0(p, touch));
     f = fopen_str("tmp_touch.txt", "r");
-    CHECK(f != NULL);
+    CHECK(f != nullptr);
     REMOVE(f);
     CHECK(CALL0(p, remove));
-    CHECK(fopen_str("tmp_touch.txt", "r") == NULL);
+    CHECK(fopen_str("tmp_touch.txt", "r") == nullptr);
     CHECK(!CALL0(p, remove));
     REMOVE(p);
 
@@ -170,7 +170,7 @@ static void test_other_classes(void)
 
     MemoryStream *ms = NEW(MemoryStream);
     Stream *s = AS(Stream, ms);
-    CHECK(s != NULL);
+    CHECK(s != nullptr);
     CALL2(s, fprintf, "id=%d", 101);
     CALL2(s, seek, 0, FS_SEEK_SET);
     char buf[16] = {0};

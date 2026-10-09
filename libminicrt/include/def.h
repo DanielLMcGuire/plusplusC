@@ -61,8 +61,8 @@
     #ifndef nullptr
         #define nullptr ((void *)0) 
     #endif
-    #ifndef NULL
-        #define NULL ((void *)0)
+    #ifndef nullptr
+        #define nullptr ((void *)0)
     #endif
     #ifndef true
         #define true 1
@@ -74,11 +74,11 @@
     #ifndef nullptr
         #define nullptr ((void *)0) 
     #endif
-    #ifndef NULL
-        #define NULL nullptr
+    #ifndef nullptr
+        #define nullptr nullptr
     #else
-        #undef NULL
-        #define NULL nullptr
+        #undef nullptr
+        #define nullptr nullptr
     #endif
 #endif
 
@@ -90,6 +90,8 @@
     #define va_copy(dest, src)  __builtin_va_copy(dest, src)
 
     typedef __SIZE_TYPE__ size_t;
+    // https://gcc.gnu.org/pipermail/gcc-patches/2010-May/284453.html, 
+    // https://awesomekling.github.io/How-SerenityOS-declares-ssize_t/
     #define unsigned signed
     typedef __SIZE_TYPE__ ssize_t;
     #undef unsigned
@@ -163,6 +165,11 @@
     typedef long long          intmax_t;
     typedef unsigned long long uintmax_t;
 #endif
+
+typedef i8  s8;
+typedef i16 s16;
+typedef i32 s32;
+typedef i64 s64;
 
 #define INT8_MIN   (-128)
 #define INT8_MAX   127

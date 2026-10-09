@@ -13,7 +13,7 @@ dstr_t dstr_new(const char *init)
     size_t len = init ? strlen(init) : 0;
     size_t cap = len < 15 ? 15 : len * 2; 
     s.data = (char*)malloc(cap + 1);
-    if (s.data)
+    if (s.data != nullptr)
     {
         if (init) memcpy(s.data, init, len);
         s.data[len] = '\0';
@@ -25,14 +25,14 @@ dstr_t dstr_new(const char *init)
 
 void dstr_append(dstr_t *s, const char *append)
 {
-    if (!s || !s->data || !append) return;
+    if (s == nullptr || s->data == nullptr || append == nullptr) return;
     size_t app_len = strlen(append);
     size_t new_len = s->len + app_len;
     if (new_len > s->cap)
     {
         size_t new_cap = new_len * 2;
         char *new_data = (char*)malloc(new_cap + 1);
-        if (!new_data) return;
+        if (new_data == nullptr) return;
         memcpy(new_data, s->data, s->len);
         free(s->data);
         s->data = new_data;
@@ -45,13 +45,13 @@ void dstr_append(dstr_t *s, const char *append)
 
 void dstr_append_char(dstr_t *s, char append)
 {
-    if (!s || !s->data) return;
+    if (s == nullptr || s->data == nullptr) return;
     size_t new_len = s->len + 1;
     if (new_len > s->cap)
     {
         size_t new_cap = new_len * 2;
         char *new_data = (char*)malloc(new_cap + 1);
-        if (!new_data) return;
+        if (new_data == nullptr) return;
         memcpy(new_data, s->data, s->len);
         free(s->data);
         s->data = new_data;
@@ -64,7 +64,7 @@ void dstr_append_char(dstr_t *s, char append)
 
 void dstr_append_int(dstr_t *s, int val)
 {
-    if (!s || !s->data) return;
+    if (s == nullptr || s->data == nullptr) return;
     if (val == 0)
     {
         dstr_append_char(s, '0');
@@ -94,7 +94,7 @@ void dstr_append_int(dstr_t *s, int val)
 
 void dstr_append_size_t(dstr_t *s, size_t val)
 {
-    if (!s || !s->data) return;
+    if (s == nullptr || s->data == nullptr) return;
     if (val == 0)
     {
         dstr_append_char(s, '0');
@@ -116,7 +116,7 @@ void dstr_append_size_t(dstr_t *s, size_t val)
 
 void dstr_free(dstr_t *s) 
 {
-    if (s && s->data) 
+    if (s != nullptr && s->data != nullptr) 
     {
         free(s->data);
         s->data = 0;

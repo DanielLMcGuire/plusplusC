@@ -47,31 +47,31 @@ char *getcwd(char *buf, size_t size)
 {
     if (buf)
     {
-        if (size == 0) return NULL;
-        return cwd_raw(buf, size) > 0 ? buf : NULL;
+        if (size == 0) return nullptr;
+        return cwd_raw(buf, size) > 0 ? buf : nullptr;
     }
 
     size_t cap = size ? size : CWD_START_CAP;
     for (;;)
     {
         char *p = (char *)malloc(cap);
-        if (!p) return NULL;
+        if (p == nullptr) return nullptr;
 
         long r = cwd_raw(p, cap);
         if (r > 0) return p;
 
         free(p);
-        if (r < 0 || size != 0 || cap >= CWD_MAX_CAP) return NULL;
+        if (r < 0 || size != 0 || cap >= CWD_MAX_CAP) return nullptr;
         cap *= 2;
     }
 }
 
 bool path_getcwd(dstr_t *out)
 {
-    if (!out) return false;
+    if (out == nullptr) return false;
 
-    char *cwd = getcwd(NULL, 0);
+    char *cwd = getcwd(nullptr, 0);
     *out = dstr_new(cwd ? cwd : "");
     if (cwd) free(cwd);
-    return cwd != NULL;
+    return cwd != nullptr;
 }

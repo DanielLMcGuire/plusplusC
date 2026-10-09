@@ -83,7 +83,7 @@ void* sys_mmap(void *addr, size_t length, int prot, int flags, int fd, size_t of
 #elif defined(__NR_mmap)
     ret = syscall(__NR_mmap, (long)addr, (long)length, prot, flags, fd, offset);
 #endif
-    if (ret < 0 && ret >= -4095) return NULL; 
+    if (ret < 0 && ret >= -4095) return nullptr; 
     return (void*)ret;
 }
 

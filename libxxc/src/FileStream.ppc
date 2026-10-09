@@ -28,7 +28,7 @@ CONSTRUCTOR(FileStream)
 #if defined(_WIN32)
     self->fd = INVALID_HANDLE_VALUE;
 #elif defined(__UEFI__)
-    self->fd = NULL;
+    self->fd = nullptr;
 #else
     self->fd = -1;
 #endif
@@ -58,7 +58,7 @@ DECONSTRUCTOR(FileStream)
     if (self->owns_fd && self->fd)
         __uefi_fclose(self->fd);
 
-    self->fd = NULL;
+    self->fd = nullptr;
 
 #elif defined(__linux__) || defined(__FreeBSD__)
 
@@ -80,13 +80,13 @@ IMPLEMENT(FileStream, i64, read, (void *self, void *buf, size_t n))
     __crt_lock_acquire(&this->base.lock);
 
 #if defined(_WIN32)
-    if (!this->fd || this->fd == INVALID_HANDLE_VALUE) goto done;
-    if (!buf || n == 0) { result = 0; goto done; }
+    if (this->fd == nullptr || this->fd == INVALID_HANDLE_VALUE) goto done;
+    if (buf == nullptr || n == 0) { result = 0; goto done; }
 
     DWORD request = n > (size_t)MAXDWORD ? MAXDWORD : (DWORD)n;
     DWORD bytes_read = 0;
 
-    if (!ReadFile(this->fd, buf, request, &bytes_read, NULL))
+    if (!ReadFile(this->fd, buf, request, &bytes_read, nullptr))
     {
         DWORD error = GetLastError();
         if (error == ERROR_BROKEN_PIPE || error == ERROR_HANDLE_EOF)
@@ -101,8 +101,8 @@ IMPLEMENT(FileStream, i64, read, (void *self, void *buf, size_t n))
     result = (i64)bytes_read;
 
 #elif defined(__UEFI__)
-    if (!this->fd) goto done;
-    if (!buf || n == 0) { result = 0; goto done; }
+    if (this->fd == nullptr) goto done;
+    if (buf == nullptr || n == 0) { result = 0; goto done; }
     result = __uefi_fread(this->fd, buf, n);
     if (result == 0) this->eof_flag = true;
 
@@ -125,18 +125,18 @@ IMPLEMENT(FileStream, i64, write, (void *self, const void *buf, size_t n))
     __crt_lock_acquire(&this->base.lock);
 
 #if defined(_WIN32)
-    if (!this->fd || this->fd == INVALID_HANDLE_VALUE) goto done;
-    if (!buf || n == 0) { result = 0; goto done; }
+    if (this->fd == nullptr || this->fd == INVALID_HANDLE_VALUE) goto done;
+    if (buf == nullptr || n == 0) { result = 0; goto done; }
 
     DWORD request = n > (size_t)MAXDWORD ? MAXDWORD : (DWORD)n;
     DWORD bytes_written = 0;
 
-    if (WriteFile(this->fd, buf, request, &bytes_written, NULL))
+    if (WriteFile(this->fd, buf, request, &bytes_written, nullptr))
         result = (i64)bytes_written;
 
 #elif defined(__UEFI__)
-    if (!this->fd) goto done;
-    if (!buf || n == 0) { result = 0; goto done; }
+    if (this->fd == nullptr) goto done;
+    if (buf == nullptr || n == 0) { result = 0; goto done; }
     result = __uefi_fwrite(this->fd, buf, n);
 
 #elif defined(__linux__) || defined(__FreeBSD__)
@@ -156,7 +156,7 @@ IMPLEMENT(FileStream, i64, seek, (void *self, i64 offset, int whence))
     __crt_lock_acquire(&this->base.lock);
 
 #if defined(_WIN32)
-    if (!this->fd || this->fd == INVALID_HANDLE_VALUE) goto done;
+    if (this->fd == nullptr || this->fd == INVALID_HANDLE_VALUE) goto done;
     DWORD method;
     switch (whence)
     {
@@ -175,7 +175,7 @@ IMPLEMENT(FileStream, i64, seek, (void *self, i64 offset, int whence))
     }
 
 #elif defined(__UEFI__)
-    if (!this->fd) goto done;
+    if (this->fd == nullptr) goto done;
     result = __uefi_fseek(this->fd, offset, whence);
     if (result >= 0) this->eof_flag = false;
 
@@ -198,13 +198,13 @@ IMPLEMENT(FileStream, i64, tell, (void *self))
     __crt_lock_acquire(&this->base.lock);
 
 #if defined(_WIN32)
-    if (!this->fd || this->fd == INVALID_HANDLE_VALUE) goto done;
+    if (this->fd == nullptr || this->fd == INVALID_HANDLE_VALUE) goto done;
     LARGE_INTEGER zero, position;
     zero.QuadPart = 0;
     if (SetFilePointerEx(this->fd, zero, &position, FILE_CURRENT))
         result = (i64)position.QuadPart;
 #elif defined(__UEFI__)
-    if (!this->fd) goto done;
+    if (this->fd == nullptr) goto done;
     result = __uefi_ftell(this->fd);
 #elif defined(__linux__) || defined(__FreeBSD__)
     result = sys_lseek(this->fd, 0, FS_SEEK_CUR);
@@ -239,7 +239,7 @@ IMPLEMENT(FileStream, void, close, (void *self))
     if (this->owns_fd && this->fd)
     {
         __uefi_fclose(this->fd);
-        this->fd = NULL;
+        this->fd = nullptr;
     }
 #elif defined(__linux__) || defined(__FreeBSD__)
     if (this->owns_fd && this->fd >= 0)
@@ -286,28 +286,28 @@ static inline Stream *__fopen(const char *path, const char *mode)
             break;
 
         default:
-            return NULL;
+            return nullptr;
     }
 
     HANDLE handle = CreateFileA(
         path,
         access,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
+        nullptr,
         creation,
         FILE_ATTRIBUTE_NORMAL,
-        NULL
+        nullptr
     );
 
     if (handle == INVALID_HANDLE_VALUE)
-        return NULL;
+        return nullptr;
 
     FileStream *fs = NEW(FileStream);
 
-    if (!fs)
+    if (fs == nullptr)
     {
         CloseHandle(handle);
-        return NULL;
+        return nullptr;
     }
 
     fs->fd       = handle;
@@ -319,19 +319,19 @@ static inline Stream *__fopen(const char *path, const char *mode)
 #elif defined(__UEFI__)
 
     if (mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a')
-        return NULL;
+        return nullptr;
 
     void *h = __uefi_fopen(path, mode);
 
-    if (!h)
-        return NULL;
+    if (h == nullptr)
+        return nullptr;
 
     FileStream *fs = NEW(FileStream);
 
-    if (!fs)
+    if (fs == nullptr)
     {
         __uefi_fclose(h);
-        return NULL;
+        return nullptr;
     }
 
     fs->fd       = h;
@@ -365,7 +365,7 @@ static inline Stream *__fopen(const char *path, const char *mode)
             break;
 
         default:
-            return NULL;
+            return nullptr;
     }
 
     long fd = sys_openat(
@@ -377,15 +377,15 @@ static inline Stream *__fopen(const char *path, const char *mode)
 
     if (fd < 0)
     {
-        return NULL;
+        return nullptr;
     }
 
     FileStream *fs = NEW(FileStream);
 
-    if (!fs)
+    if (fs == nullptr)
     {
         sys_close((int)fd);
-        return NULL;
+        return nullptr;
     }
 
     fs->fd       = (int)fd;
@@ -399,15 +399,15 @@ static inline Stream *__fopen(const char *path, const char *mode)
     (void)path;
     (void)mode;
 
-    return NULL;
+    return nullptr;
 
 #endif
 }
 
 Stream *fopen(FSPath *path, const char *mode)
 {
-    if (!path || !mode || !mode[0])
-        return NULL;
+    if (path == nullptr || mode == nullptr || !mode[0])
+        return nullptr;
 
     dstr_t dsPath = CALL0(path, data);
     char *csPath = dsPath.data;
@@ -419,8 +419,8 @@ Stream *fopen(FSPath *path, const char *mode)
 
 Stream *fopen_str(const char *path, const char *mode)
 {
-    if (!path || !mode || !mode[0])
-        return NULL;
+    if (path == nullptr || mode == nullptr || !mode[0])
+        return nullptr;
 
     return __fopen(path, mode);
 }
@@ -496,7 +496,7 @@ Stream *cerr(void)
 
 i64 fwrite(Stream *s, const char *str)
 {
-    if (!s || !str)
+    if (s == nullptr || str == nullptr)
         return -1;
 
     return CALL2(s, write, str, strlen(str));
@@ -505,7 +505,7 @@ i64 fwrite(Stream *s, const char *str)
 
 i64 freadline(Stream *s, dstr_t *out)
 {
-    if (!s || !out)
+    if (s == nullptr || out == nullptr)
         return -1;
 
     *out = dstr_new("");

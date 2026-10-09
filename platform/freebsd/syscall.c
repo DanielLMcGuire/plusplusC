@@ -70,7 +70,7 @@ void sys_exit(int status)
 void* sys_mmap(void *addr, size_t length, int prot, int flags, int fd, size_t offset)
 {
     long ret = syscall(XXC_SYS_mmap, (long)addr, (long)length, (long)prot, (long)flags, (long)fd, (long)offset);
-    if (ret < 0 && ret >= -4095) return NULL;
+    if (ret < 0 && ret >= -4095) return nullptr;
     return (void*)ret;
 }
 
@@ -152,7 +152,7 @@ void sys_thr_exit(long *state)
 void sys_exit_thread(int status)
 {
     (void)status;
-    sys_thr_exit(NULL);
+    sys_thr_exit(nullptr);
 }
 
 long sys_socket(int domain, int type, int protocol)

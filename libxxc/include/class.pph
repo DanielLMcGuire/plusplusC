@@ -45,7 +45,7 @@ static inline const C_Header *c_header_const(const void *object)
 
 static inline void c_init_class(const Class *class)
 {
-    if (!class || !class->init)
+    if (class == nullptr || class->init == nullptr)
         return;
 
     class->init();
@@ -53,8 +53,8 @@ static inline void c_init_class(const Class *class)
 
 static inline const Class *c_class(const void *object)
 {
-    if (!object)
-        return NULL;
+    if (object == nullptr)
+        return nullptr;
 
     const Class *class = c_header_const(object)->class;
     c_init_class(class);
@@ -66,16 +66,12 @@ static inline void *c_new(const Class *class)
     C_Header *header;
     void *object;
 
-    if (!class)
-        return NULL;
+    if (class == nullptr)
+        return nullptr;
 
-    header = calloc(
-        1,
-        sizeof(C_Header) + class->size
-    );
-
-    if (!header)
-        return NULL;
+    header = calloc(1, sizeof(C_Header) + class->size);
+    if (header == nullptr)
+        return nullptr;
 
     header->class = class;
 
@@ -92,7 +88,7 @@ static inline void c_delete(void *object)
     C_Header *header;
     const Class *class;
 
-    if (!object)
+    if (object == nullptr)
         return;
 
     header = c_header(object);
@@ -106,14 +102,14 @@ static inline void c_delete(void *object)
 
 static inline void c_scoped_delete(void *p_object)
 {
-    if (!p_object)
+    if (p_object == nullptr)
         return;
 
     void *object = *(void **)p_object;
     if (object)
     {
         c_delete(object);
-        *(void **)p_object = NULL;
+        *(void **)p_object = nullptr;
     }
 }
 
@@ -123,7 +119,7 @@ static inline int c_is_a(
 {
     const Class *current;
 
-    if (!object || !class)
+    if (object == nullptr || class == nullptr)
         return 0;
 
     current = c_class(object);
@@ -144,7 +140,7 @@ static inline int c_is_a(
 #define AS(Type, object) \
     (c_is_a((object), &Type##__Class) \
         ? (Type *)(object) \
-        : NULL)
+        : nullptr)
 
 #define CLASS_1(name)            \
     typedef struct name name;      \
@@ -204,11 +200,11 @@ static inline int c_is_a(
 #define CLASS_INFO_ROOT(Type) \
     XXC_DYN_EXPORT Class Type##__Class = { \
         .name = #Type, \
-        .parent = NULL, \
+        .parent = nullptr, \
         .size = sizeof(Type), \
         .constructor = (C_Constructor)Type##__ctor, \
         .destructor = (C_Destructor)Type##__dctor, \
-        .init = NULL \
+        .init = nullptr \
     }
 
 
@@ -217,12 +213,12 @@ static inline int c_is_a(
     XXC_CLASS_DECL(parent_type) \
     extern XXC_DYN_EXPORT Class Type##__Class; \
     static void Type##__Class_init(void) { \
-        if (!Type##__Class.parent) \
+        if (Type##__Class.parent == nullptr) \
             Type##__Class.parent = &parent_type##__Class; \
     } \
     XXC_DYN_EXPORT Class Type##__Class = { \
         .name = #Type, \
-        .parent = NULL, \
+        .parent = nullptr, \
         .size = sizeof(Type), \
         .constructor = (C_Constructor)Type##__ctor, \
         .destructor = (C_Destructor)Type##__dctor, \

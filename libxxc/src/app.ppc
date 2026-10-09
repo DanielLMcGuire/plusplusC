@@ -43,7 +43,7 @@ IMPLEMENT(Application, void, parse_args, (void *self, const parr_t *argv))
 {
     Application *this = (Application *)self;
 
-    const char *path = NULL;
+    const char *path = nullptr;
 
     if (argv && argv->len > 0)
     {

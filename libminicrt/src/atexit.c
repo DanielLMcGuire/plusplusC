@@ -45,7 +45,7 @@ static bool g_exiting = false;
 
 int atexit(atexit_func_t func)
 {
-    if (func == NULL)
+    if (func == nullptr)
         return -1;
     __crt_lock_acquire(&g_atexit_lock);
     if (handler_count >= MAX_ATEXIT_FUNCS)
@@ -81,7 +81,7 @@ XXC_NORETURN void exit(int status)
         }
         func = exit_handlers[--handler_count];
         __crt_lock_release(&g_atexit_lock);
-        if (func != NULL)
+        if (func != nullptr)
             func();
     }
 

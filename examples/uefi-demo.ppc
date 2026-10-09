@@ -116,7 +116,7 @@ int program(parr_t csArgs)
         CALL5(disp, fill_rect, 0, (i32)y, W, 1, CALL3(disp, color, 10, v / 2, v));
     }
 
-    parr_t scene = parr_new(NULL, 0);
+    parr_t scene = parr_new(nullptr, 0);
     parr_append_val(&scene, make_rect  (disp, W/10,   top + H/8,  W/4, H/3,   230,  80,  60));
     parr_append_val(&scene, make_circle(disp, W/2,    top + H/2,  H/3,        250, 210,  40));
     parr_append_val(&scene, make_rect  (disp, W*6/10, top + H/2,  W/4, H/3,    60, 200, 120));

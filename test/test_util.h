@@ -84,13 +84,13 @@ static void *oom_begin(void)
     static const size_t sizes[] = { 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128,
                                     160, 192, 224, 256, 320, 384, 448, 512, 640, 768,
                                     896, 1024, 1536, 2048, 3072, 4096 };
-    void *head = NULL;
+    void *head = nullptr;
     for (int round = 0; round < 2; round++)
     {
         for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++)
         {
             void *p;
-            while ((p = malloc(sizes[i])) != NULL)
+            while ((p = malloc(sizes[i])) != nullptr)
             {
                 *(void **)p = head;
                 head = p;

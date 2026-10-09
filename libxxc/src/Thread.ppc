@@ -9,8 +9,8 @@ CLASS_INFO_ROOT(Thread);
 
 CONSTRUCTOR(Thread)
 {
-    self->handle = NULL;
-    self->target = NULL;
+    self->handle = nullptr;
+    self->target = nullptr;
     self->owns_target = false;
     self->started = false;
     self->joined = false;
@@ -25,7 +25,7 @@ CONSTRUCTOR(Thread)
 
 DECONSTRUCTOR(Thread)
 {
-    if (self->started && !self->joined && self->handle)
+    if (self->started && !self->joined && self->handle != nullptr)
         thread_detach(self->handle);
 
     if (self->owns_target && self->target)
@@ -50,7 +50,7 @@ static void *detached_trampoline(void *arg)
     if (state->owns_target)
         REMOVE(state->target);
     free(state);
-    return NULL;
+    return nullptr;
 }
 
 IMPLEMENT(Thread, bool, start, (void *self))
@@ -74,7 +74,7 @@ IMPLEMENT(Thread, bool, start_detached, (void *self))
         return false;
 
     detached_state_t *state = (detached_state_t *)malloc(sizeof(detached_state_t));
-    if (!state)
+    if (state == nullptr)
         return false;
     state->target = this->target;
     state->owns_target = this->owns_target;
@@ -89,7 +89,7 @@ IMPLEMENT(Thread, bool, start_detached, (void *self))
     }
 
     this->owns_target = false;
-    this->handle = NULL;
+    this->handle = nullptr;
     this->started = true;
     this->joined = true;
     return true;
@@ -98,34 +98,34 @@ IMPLEMENT(Thread, bool, start_detached, (void *self))
 IMPLEMENT(Thread, void *, join, (void *self))
 {
     Thread *this = (Thread *)self;
-    if (!this->started || this->joined || !this->handle)
-        return NULL;
+    if (!this->started || this->joined || this->handle == nullptr)
+        return nullptr;
 
-    void *retval = NULL;
+    void *retval = nullptr;
     thread_join(this->handle, &retval);
     this->joined = true;
-    this->handle = NULL;
+    this->handle = nullptr;
     return retval;
 }
 
 IMPLEMENT(Thread, bool, detach, (void *self))
 {
     Thread *this = (Thread *)self;
-    if (!this->started || this->joined || !this->handle)
+    if (!this->started || this->joined || this->handle == nullptr)
         return false;
 
     if (thread_detach(this->handle) != THREAD_SUCCESS)
         return false;
 
     this->joined = true;
-    this->handle = NULL;
+    this->handle = nullptr;
     return true;
 }
 
 IMPLEMENT(Thread, bool, is_joinable, (void *self))
 {
     Thread *this = (Thread *)self;
-    return this->started && !this->joined && this->handle != NULL;
+    return this->started && !this->joined && this->handle != nullptr;
 }
 
 IMPLEMENT(Thread, u32, get_id, (void *self))
@@ -161,8 +161,8 @@ CLASS_INFO(FuncRunnable, Runnable);
 CONSTRUCTOR(FuncRunnable)
 {
     SUPER_CTOR(self, Runnable);
-    self->fn = NULL;
-    self->arg = NULL;
+    self->fn = nullptr;
+    self->arg = nullptr;
     METHOD_LINK(base, FuncRunnable, run);
 }
 
@@ -174,25 +174,25 @@ DECONSTRUCTOR(FuncRunnable)
 IMPLEMENT(FuncRunnable, void *, run, (void *self))
 {
     FuncRunnable *this = (FuncRunnable *)self;
-    return this->fn ? this->fn(this->arg) : NULL;
+    return this->fn ? this->fn(this->arg) : nullptr;
 }
 
 Thread *thread_new_fn(thread_fn_t fn, void *arg)
 {
-    if (!fn)
-        return NULL;
+    if (fn == nullptr)
+        return nullptr;
 
     FuncRunnable *fr = NEW(FuncRunnable);
-    if (!fr)
-        return NULL;
+    if (fr == nullptr)
+        return nullptr;
     fr->fn = fn;
     fr->arg = arg;
 
     Thread *t = NEW(Thread);
-    if (!t)
+    if (t == nullptr)
     {
         REMOVE(fr);
-        return NULL;
+        return nullptr;
     }
     t->target = (Runnable *)fr;
     t->owns_target = true;

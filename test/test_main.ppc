@@ -94,13 +94,13 @@ static bool test_dstr(void)
     ASSERT_STR_EQ(s.data, "Hello World42");
     
     dstr_free(&s);
-    ASSERT(s.data == NULL);
+    ASSERT(s.data == nullptr);
     return true;
 }
 
 static bool test_iarr(void)
 {
-    iarr_t arr = iarr_new(NULL, 0);
+    iarr_t arr = iarr_new(nullptr, 0);
     
     for (int i = 0; i < 100; i++)
         iarr_append_val(&arr, i);
@@ -111,13 +111,13 @@ static bool test_iarr(void)
     ASSERT(arr.data[99] == 99);
     
     iarr_free(&arr);
-    ASSERT(arr.data == NULL);
+    ASSERT(arr.data == nullptr);
     return true;
 }
 
 static bool test_parr(void)
 {
-    parr_t arr = parr_new(NULL, 0);
+    parr_t arr = parr_new(nullptr, 0);
     
     char* a = "Item A";
     char* b = "Item B";
@@ -152,16 +152,16 @@ static bool test_formatting(void)
 static bool test_oop_system(void)
 {
     Dog *dog = NEW(Dog);
-    ASSERT(dog != NULL);
+    ASSERT(dog != nullptr);
     
     Animal *animal = AS(Animal, dog);
-    ASSERT(animal != NULL);
+    ASSERT(animal != nullptr);
     
     const char* sound = CALL0(animal, speak);
     ASSERT_STR_EQ(sound, "Woof!");
     
     Stream *invalid = AS(Stream, dog);
-    ASSERT(invalid == NULL);
+    ASSERT(invalid == nullptr);
     
     REMOVE(dog);
     return true;
@@ -329,9 +329,9 @@ static void *ret_arg_plus_one(void *arg)
 static bool test_thread_create_join(void)
 {
     thread_t t;
-    ASSERT(thread_create(&t, ret_arg_plus_one, (void *)(uintptr_t)41, NULL) == THREAD_SUCCESS);
-    ASSERT(t != NULL);
-    void *rv = NULL;
+    ASSERT(thread_create(&t, ret_arg_plus_one, (void *)(uintptr_t)41, nullptr) == THREAD_SUCCESS);
+    ASSERT(t != nullptr);
+    void *rv = nullptr;
     ASSERT(thread_join(t, &rv) == THREAD_SUCCESS);
     ASSERT((uintptr_t)rv == 42);
     return true;
@@ -347,22 +347,22 @@ static void *report_ids(void *arg)
 #else
     out[2] = out[0];
 #endif
-    return NULL;
+    return nullptr;
 }
 
 static bool test_thread_identity(void)
 {
     u32 ids[3] = { 0, 0, 0 };
     thread_t t;
-    ASSERT(thread_create(&t, report_ids, ids, NULL) == THREAD_SUCCESS);
-    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, report_ids, ids, nullptr) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
     ASSERT(ids[0] != 0 && ids[0] == ids[1] && ids[0] == ids[2]);
     ASSERT(ids[0] != thread_current_id());          
-    ASSERT(thread_self() != NULL);
+    ASSERT(thread_self() != nullptr);
     ASSERT(thread_equal(thread_self(), thread_self()));
-    ASSERT(thread_join(thread_self(), NULL) == THREAD_DEADLK);
-    ASSERT(thread_join(NULL, NULL) == THREAD_INVAL);
-    ASSERT(thread_create(NULL, ret_arg_plus_one, NULL, NULL) == THREAD_INVAL);
+    ASSERT(thread_join(thread_self(), nullptr) == THREAD_DEADLK);
+    ASSERT(thread_join(nullptr, nullptr) == THREAD_INVAL);
+    ASSERT(thread_create(nullptr, ret_arg_plus_one, nullptr, nullptr) == THREAD_INVAL);
     return true;
 }
 
@@ -376,7 +376,7 @@ static void *tls_child(void *arg)
     t_counter = 1000; t_zero = 99;                  
     t_buf[2] = 77;
     r->ok = ok && t_counter == 1000;
-    return NULL;
+    return nullptr;
 }
 
 static bool test_tls_isolation(void)
@@ -384,8 +384,8 @@ static bool test_tls_isolation(void)
     t_counter = 43; t_zero = 7; t_buf[2] = 3;
     tls_report_t r[4] = {{0,0},{0,0},{0,0},{0,0}};
     thread_t t[4];
-    for (int i = 0; i < 4; i++) ASSERT(thread_create(&t[i], tls_child, &r[i], NULL) == THREAD_SUCCESS);
-    for (int i = 0; i < 4; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < 4; i++) ASSERT(thread_create(&t[i], tls_child, &r[i], nullptr) == THREAD_SUCCESS);
+    for (int i = 0; i < 4; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     for (int i = 0; i < 4; i++) { ASSERT(r[i].ok); ASSERT(r[i].seen_counter == 42); }
     ASSERT(t_counter == 43 && t_zero == 7 && t_buf[2] == 3);
     return true;
@@ -401,7 +401,7 @@ static void *counter_worker(void *arg)
         atomic_i32_fetch_add(&g_counter, 1);
         if ((i & 255) == 0) thread_yield();
     }
-    return NULL;
+    return nullptr;
 }
 
 static bool test_many_threads_atomic_counter(void)
@@ -409,8 +409,8 @@ static bool test_many_threads_atomic_counter(void)
     enum { N = 32, ITER = 5000 };
     thread_t t[N];
     atomic_i32_store(&g_counter, 0);
-    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], counter_worker, (void *)(uintptr_t)ITER, NULL) == THREAD_SUCCESS);
-    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], counter_worker, (void *)(uintptr_t)ITER, nullptr) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     ASSERT(atomic_i32_load(&g_counter) == N * ITER);
     return true;
 }
@@ -435,7 +435,7 @@ static bool test_thread_stack_sizes(void)
     thread_t t;
     void *rv;
     
-    ASSERT(thread_create(&t, deep_worker, (void *)(uintptr_t)1000, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, deep_worker, (void *)(uintptr_t)1000, nullptr) == THREAD_SUCCESS);
     ASSERT(thread_join(t, &rv) == THREAD_SUCCESS && (uintptr_t)rv == 1000);
 
     
@@ -459,7 +459,7 @@ static void *detached_worker(void *arg)
     (void)arg;
     thread_sleep_ms(5);
     atomic_i32_fetch_add(&g_detached_done, 1);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_thread_detach(void)
@@ -468,7 +468,7 @@ static bool test_thread_detach(void)
 
     
     thread_t t;
-    ASSERT(thread_create(&t, detached_worker, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, detached_worker, nullptr, nullptr) == THREAD_SUCCESS);
     ASSERT(thread_detach(t) == THREAD_SUCCESS);
     wait_until(&g_detached_done, 1, 2000);
     ASSERT(atomic_i32_load(&g_detached_done) == 1);
@@ -477,20 +477,20 @@ static bool test_thread_detach(void)
     thread_attr_t da = THREAD_ATTR_INIT;
     da.detached = true;
     thread_t none = (thread_t)1;
-    ASSERT(thread_create(&none, detached_worker, NULL, &da) == THREAD_SUCCESS);
-    ASSERT(none == NULL);
+    ASSERT(thread_create(&none, detached_worker, nullptr, &da) == THREAD_SUCCESS);
+    ASSERT(none == nullptr);
     wait_until(&g_detached_done, 2, 2000);
     ASSERT(atomic_i32_load(&g_detached_done) == 2);
 
     
-    ASSERT(thread_create(&t, ret_arg_plus_one, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, ret_arg_plus_one, nullptr, nullptr) == THREAD_SUCCESS);
     thread_sleep_ms(20);
     ASSERT(thread_detach(t) == THREAD_SUCCESS);
 
     
-    ASSERT(thread_create(&t, detached_worker, NULL, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, detached_worker, nullptr, nullptr) == THREAD_SUCCESS);
     ASSERT(thread_detach(t) == THREAD_SUCCESS);
-    ASSERT(thread_join(t, NULL) == THREAD_INVAL);
+    ASSERT(thread_join(t, nullptr) == THREAD_INVAL);
     wait_until(&g_detached_done, 3, 2000);
     thread_sleep_ms(10);
     return true;
@@ -511,20 +511,20 @@ static long map_count(void)
     return lines;
 }
 
-static void *noop_worker(void *arg) { (void)arg; return NULL; }
+static void *noop_worker(void *arg) { (void)arg; return nullptr; }
 
 static bool test_thread_no_mapping_leak(void)
 {
     thread_t t;
     
-    for (int i = 0; i < 8; i++) { ASSERT(thread_create(&t, noop_worker, NULL, NULL) == THREAD_SUCCESS); thread_join(t, NULL); }
+    for (int i = 0; i < 8; i++) { ASSERT(thread_create(&t, noop_worker, nullptr, nullptr) == THREAD_SUCCESS); thread_join(t, nullptr); }
     long before = map_count();
     ASSERT(before > 0);
 
     for (int i = 0; i < 1500; i++)
     {
-        ASSERT(thread_create(&t, noop_worker, NULL, NULL) == THREAD_SUCCESS);
-        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_create(&t, noop_worker, nullptr, nullptr) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
     }
 
     atomic_i32_store(&g_detached_done, 0);
@@ -534,7 +534,7 @@ static bool test_thread_no_mapping_leak(void)
     for (int i = 0; i < 1500; i++)
     {
         thread_t none;
-        if (thread_create(&none, detached_worker, NULL, &da) == THREAD_SUCCESS) started++;
+        if (thread_create(&none, detached_worker, nullptr, &da) == THREAD_SUCCESS) started++;
         else thread_sleep_ms(2);           
         if ((i & 63) == 63) wait_until(&g_detached_done, started, 2000); 
     }
@@ -563,10 +563,10 @@ static tls_key_t g_key;
 
 static void *key_worker(void *arg)
 {
-    if (tls_get(g_key) != NULL) return (void *)1;          
+    if (tls_get(g_key) != nullptr) return (void *)1;          
     tls_set(g_key, arg);
     if (tls_get(g_key) != arg) return (void *)2;
-    return NULL;                                           
+    return nullptr;                                           
 }
 
 static bool test_tls_keys(void)
@@ -574,13 +574,13 @@ static bool test_tls_keys(void)
     atomic_i32_store(&g_dtor_calls, 0);
     atomic_i32_store(&g_dtor_sum, 0);
     ASSERT(tls_key_create(&g_key, key_dtor) == THREAD_SUCCESS);
-    ASSERT(tls_get(g_key) == NULL);
+    ASSERT(tls_get(g_key) == nullptr);
     ASSERT(tls_set(g_key, (void *)(uintptr_t)5) == THREAD_SUCCESS);
     ASSERT((uintptr_t)tls_get(g_key) == 5);
 
     thread_t t[3];
-    for (int i = 0; i < 3; i++) ASSERT(thread_create(&t[i], key_worker, (void *)(uintptr_t)(10 * (i + 1)), NULL) == THREAD_SUCCESS);
-    for (int i = 0; i < 3; i++) { void *rv = (void *)9; ASSERT(thread_join(t[i], &rv) == THREAD_SUCCESS); ASSERT(rv == NULL); }
+    for (int i = 0; i < 3; i++) ASSERT(thread_create(&t[i], key_worker, (void *)(uintptr_t)(10 * (i + 1)), nullptr) == THREAD_SUCCESS);
+    for (int i = 0; i < 3; i++) { void *rv = (void *)9; ASSERT(thread_join(t[i], &rv) == THREAD_SUCCESS); ASSERT(rv == nullptr); }
     ASSERT(atomic_i32_load(&g_dtor_calls) == 3);
     ASSERT(atomic_i32_load(&g_dtor_sum) == 60);
     ASSERT((uintptr_t)tls_get(g_key) == 5);                
@@ -589,10 +589,10 @@ static bool test_tls_keys(void)
     ASSERT(tls_key_delete(g_key) == THREAD_SUCCESS);
     ASSERT(tls_key_delete(g_key) == THREAD_INVAL);
     tls_key_t k2;
-    ASSERT(tls_key_create(&k2, NULL) == THREAD_SUCCESS);
-    ASSERT(tls_get(k2) == NULL);
+    ASSERT(tls_key_create(&k2, nullptr) == THREAD_SUCCESS);
+    ASSERT(tls_get(k2) == nullptr);
     ASSERT(tls_key_delete(k2) == THREAD_SUCCESS);
-    ASSERT(tls_set(g_key, NULL) == THREAD_INVAL);
+    ASSERT(tls_set(g_key, nullptr) == THREAD_INVAL);
     return true;
 }
 
@@ -617,7 +617,7 @@ static void *blk_new(size_t size, u64 seed)
 {
     if (size < BLK_MIN) size = BLK_MIN;
     u8 *p = (u8 *)malloc(size);
-    if (!p) return NULL;
+    if (p == nullptr) return nullptr;
     blk_hdr *h = (blk_hdr *)p;
     h->size = size;
     h->seed = seed;
@@ -643,11 +643,11 @@ static void *blk_resize(void *q, size_t newsize, u64 newseed, bool *ok)
     if (old.size < BLK_MIN || !blk_verify(p, old.size, old.seed)) 
     { 
         *ok = false; 
-        return NULL; 
+        return nullptr; 
     }
 
     u8 *n = (u8 *)realloc(p, newsize);
-    if (!n) { 
+    if (n == nullptr) { 
         *ok = true; 
         return p; 
     }            
@@ -659,7 +659,7 @@ static void *blk_resize(void *q, size_t newsize, u64 newseed, bool *ok)
     )
     { 
         *ok = false; 
-        return NULL; 
+        return nullptr; 
     }
     hn->size = newsize;
     hn->seed = newseed;
@@ -701,22 +701,22 @@ static long rss_pages(void)
 
 static bool test_alloc_basics(void)
 {
-    ASSERT(malloc(0) != NULL);                     
+    ASSERT(malloc(0) != nullptr);                     
     void *a = malloc(0), *b = malloc(0);
     ASSERT(a && b && a != b);
     free(a); free(b);
-    free(NULL);                                    
+    free(nullptr);                                    
 
-    ASSERT(malloc((size_t)-1) == NULL);
-    ASSERT(malloc((size_t)-1 / 2) == NULL);
-    ASSERT(calloc((size_t)-1, 2) == NULL);         
-    ASSERT(calloc(1u << 31, 1u << 31) == NULL);
+    ASSERT(malloc((size_t)-1) == nullptr);
+    ASSERT(malloc((size_t)-1 / 2) == nullptr);
+    ASSERT(calloc((size_t)-1, 2) == nullptr);         
+    ASSERT(calloc(1u << 31, 1u << 31) == nullptr);
 
     
     for (size_t sz = 1; sz <= 20000; sz += (sz < 300 ? 1 : 37))
     {
         u8 *p = (u8 *)malloc(sz);
-        ASSERT(p != NULL);
+        ASSERT(p != nullptr);
         ASSERT(((uintptr_t)p & 15) == 0);
         size_t us = malloc_usable_size(p);
         ASSERT(us >= sz);
@@ -725,7 +725,7 @@ static bool test_alloc_basics(void)
         memset(p, 0x5A, us);                        
         free(p);
     }
-    ASSERT(malloc_usable_size(NULL) == 0);
+    ASSERT(malloc_usable_size(nullptr) == 0);
     return true;
 }
 
@@ -774,7 +774,7 @@ static bool test_alloc_no_overlap(void)
         ASSERT(blk_verify((u8 *)ptrs[i], h->size, h->seed));
     }
     
-    for (int i = 0; i < N; i += 2) { ASSERT(blk_free(ptrs[i])); ptrs[i] = NULL; }
+    for (int i = 0; i < N; i += 2) { ASSERT(blk_free(ptrs[i])); ptrs[i] = nullptr; }
     for (int i = 0; i < N; i += 2) { ptrs[i] = blk_new(rnd_size(&r) % 3000 + 1, (u64)i * 104729 + 3); ASSERT(ptrs[i]); }
     for (int i = 0; i < N; i++) ASSERT(blk_free(ptrs[i]));
     return true;
@@ -818,9 +818,9 @@ static bool test_alloc_calloc(void)
 static bool test_alloc_realloc(void)
 {
     
-    void *p = realloc(NULL, 100);
+    void *p = realloc(nullptr, 100);
     ASSERT(p);
-    ASSERT(realloc(p, 0) == NULL);
+    ASSERT(realloc(p, 0) == nullptr);
 
     
     bool ok = true;
@@ -850,7 +850,7 @@ static bool test_alloc_realloc(void)
 
     
     u8 *t = (u8 *)blk_new(500, 9);
-    ASSERT(realloc(t, (size_t)-1) == NULL);
+    ASSERT(realloc(t, (size_t)-1) == nullptr);
     ASSERT(blk_free(t));
     return true;
 }
@@ -888,7 +888,7 @@ static bool test_alloc_random_single_thread(void)
     {
         unsigned idx = (unsigned)(rnd(&r) % SLOTS);
         u64 op = rnd(&r) % 8;
-        if (!slots[idx])
+        if (slots[idx] == nullptr)
         {
             slots[idx] = blk_new(rnd_size(&r), rnd(&r));
             ASSERT(slots[idx]);
@@ -902,7 +902,7 @@ static bool test_alloc_random_single_thread(void)
         else
         {
             ASSERT(blk_free(slots[idx]));
-            slots[idx] = NULL;
+            slots[idx] = nullptr;
         }
     }
     for (int i = 0; i < SLOTS; i++) if (slots[i]) ASSERT(blk_free(slots[i]));
@@ -910,7 +910,7 @@ static bool test_alloc_random_single_thread(void)
 }
 
 static atomic_i32_t g_fail = ATOMIC_INIT(0);
-#define T_CHECK(c) do { if (!(c)) { atomic_i32_fetch_add(&g_fail, 1); return NULL; } } while (0)
+#define T_CHECK(c) do { if (!(c)) { atomic_i32_fetch_add(&g_fail, 1); return nullptr; } } while (0)
 
 typedef struct { u64 seed; int ops; } worker_arg_t;
 
@@ -919,12 +919,12 @@ static void *random_worker(void *p)
     worker_arg_t *a = (worker_arg_t *)p;
     enum { SLOTS = 400 };
     void *slots[SLOTS];
-    for (int i = 0; i < SLOTS; i++) slots[i] = NULL;
+    for (int i = 0; i < SLOTS; i++) slots[i] = nullptr;
     rng_t r = { a->seed };
     for (int i = 0; i < a->ops; i++)
     {
         unsigned idx = (unsigned)(rnd(&r) % SLOTS);
-        if (!slots[idx])
+        if (slots[idx] == nullptr)
         { 
             slots[idx] = blk_new(rnd_size(&r), rnd(&r)); 
             T_CHECK(slots[idx]); 
@@ -935,11 +935,11 @@ static void *random_worker(void *p)
             slots[idx] = blk_resize(slots[idx], rnd_size(&r), rnd(&r), &ok);
             T_CHECK(ok && slots[idx]);
         }
-        else { T_CHECK(blk_free(slots[idx])); slots[idx] = NULL; }
+        else { T_CHECK(blk_free(slots[idx])); slots[idx] = nullptr; }
         if ((i & 1023) == 0) thread_yield();
     }
     for (int i = 0; i < SLOTS; i++) if (slots[i]) T_CHECK(blk_free(slots[i]));
-    return NULL;
+    return nullptr;
 }
 
 static bool test_alloc_threads_independent(void)
@@ -948,8 +948,8 @@ static bool test_alloc_threads_independent(void)
     thread_t t[T];
     worker_arg_t a[T];
     atomic_i32_store(&g_fail, 0);
-    for (int i = 0; i < T; i++) { a[i].seed = 0x9E3779B97F4A7C15ull * (u64)(i + 1); a[i].ops = 60000; ASSERT(thread_create(&t[i], random_worker, &a[i], NULL) == THREAD_SUCCESS); }
-    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < T; i++) { a[i].seed = 0x9E3779B97F4A7C15ull * (u64)(i + 1); a[i].ops = 60000; ASSERT(thread_create(&t[i], random_worker, &a[i], nullptr) == THREAD_SUCCESS); }
+    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     ASSERT(atomic_i32_load(&g_fail) == 0);
     return true;
 }
@@ -975,7 +975,7 @@ static void *ring_pop(ring_t *q)
 {
     size_t h = atomic_size_load_explicit(&q->head, ATOMIC_RELAXED);
     size_t t = atomic_size_load_explicit(&q->tail, ATOMIC_ACQUIRE);
-    if (h == t) return NULL;
+    if (h == t) return nullptr;
     void *p = atomic_ptr_load_explicit(&q->slot[h % RING_CAP], ATOMIC_RELAXED);
     atomic_size_store_explicit(&q->head, h + 1, ATOMIC_RELEASE);
     return p;
@@ -992,20 +992,20 @@ static void *ring_worker(void *p)
     ring_arg_t *a = (ring_arg_t *)p;
     rng_t r = { a->seed };
     int produced = 0, consumed = 0;
-    void *pending = NULL;
+    void *pending = nullptr;
     while (produced < a->items || consumed < a->items)
     {
         bool progressed = false;
         if (produced < a->items)
         {
             if (!pending) { pending = blk_new(rnd_size(&r), rnd(&r)); T_CHECK(pending); }
-            if (ring_push(a->out, pending)) { pending = NULL; produced++; progressed = true; }
+            if (ring_push(a->out, pending)) { pending = nullptr; produced++; progressed = true; }
         }
         void *q = ring_pop(a->in);
         if (q) { T_CHECK(blk_free(q)); consumed++; progressed = true; }   
         if (!progressed) thread_yield();
     }
-    return NULL;
+    return nullptr;
 }
 
 static bool test_alloc_cross_thread_free(void)
@@ -1017,7 +1017,7 @@ static bool test_alloc_cross_thread_free(void)
     atomic_i32_store(&g_fail, 0);
     for (int i = 0; i < T; i++)
     {
-        for (int k = 0; k < RING_CAP; k++) atomic_ptr_init(&rings[i].slot[k], NULL);
+        for (int k = 0; k < RING_CAP; k++) atomic_ptr_init(&rings[i].slot[k], nullptr);
         atomic_size_init(&rings[i].head, 0);
         atomic_size_init(&rings[i].tail, 0);
     }
@@ -1027,9 +1027,9 @@ static bool test_alloc_cross_thread_free(void)
         a[i].out = &rings[(i + 1) % T];
         a[i].items = 40000;
         a[i].seed = 77 + (u64)i * 1000003;
-        ASSERT(thread_create(&t[i], ring_worker, &a[i], NULL) == THREAD_SUCCESS);
+        ASSERT(thread_create(&t[i], ring_worker, &a[i], nullptr) == THREAD_SUCCESS);
     }
-    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < T; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     ASSERT(atomic_i32_load(&g_fail) == 0);
     return true;
 }
@@ -1051,9 +1051,9 @@ static void *churn_worker(void *p)
     for (int i = 0; i < CHURN_BLOCKS; i += 3)      
     {
         T_CHECK(blk_free(a->blocks[i]));
-        a->blocks[i] = NULL;
+        a->blocks[i] = nullptr;
     }
-    return NULL;                                   
+    return nullptr;                                   
 }
 
 static bool test_alloc_thread_churn(void)
@@ -1070,11 +1070,11 @@ static bool test_alloc_thread_churn(void)
 #endif
         thread_t t;
         arg.seed = 1000 + (u64)round;
-        ASSERT(thread_create(&t, churn_worker, &arg, NULL) == THREAD_SUCCESS);
-        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_create(&t, churn_worker, &arg, nullptr) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
         
         for (int i = 0; i < CHURN_BLOCKS; i++)
-            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = NULL; }
+            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = nullptr; }
     }
     ASSERT(atomic_i32_load(&g_fail) == 0);
 #if defined(__linux__)
@@ -1099,10 +1099,10 @@ static bool test_alloc_pages_recycled_across_threads(void)
         static churn_arg_t arg;
         thread_t t;
         arg.seed = 5 + (u64)round;
-        ASSERT(thread_create(&t, churn_worker, &arg, NULL) == THREAD_SUCCESS);
-        ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+        ASSERT(thread_create(&t, churn_worker, &arg, nullptr) == THREAD_SUCCESS);
+        ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
         for (int i = 0; i < CHURN_BLOCKS; i++)
-            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = NULL; }
+            if (arg.blocks[i]) { ASSERT(blk_free(arg.blocks[i])); arg.blocks[i] = nullptr; }
     }
 #if defined(__linux__) && RSS_CHECKS_MEANINGFUL
     long r1 = rss_pages();
@@ -1144,7 +1144,7 @@ static void *cv_waiter(void *p)
         cond_wait(&ctx->c, &ctx->m);
     ctx->got_it = true;
     mutex_unlock(&ctx->m);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_cond_signal_wakes_waiter(void)
@@ -1156,7 +1156,7 @@ static bool test_cond_signal_wakes_waiter(void)
     ctx.got_it = false;
 
     thread_t t;
-    ASSERT(thread_create(&t, cv_waiter, &ctx, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, cv_waiter, &ctx, nullptr) == THREAD_SUCCESS);
     thread_sleep_ms(20);              
 
     mutex_lock(&ctx.m);
@@ -1164,7 +1164,7 @@ static bool test_cond_signal_wakes_waiter(void)
     cond_signal(&ctx.c);
     mutex_unlock(&ctx.m);
 
-    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
     ASSERT(ctx.got_it);
     mutex_destroy(&ctx.m);
     cond_destroy(&ctx.c);
@@ -1181,7 +1181,7 @@ static void *bcast_waiter(void *p)
         cond_wait(&ctx->c, &ctx->m);
     mutex_unlock(&ctx->m);
     atomic_i32_fetch_add(&ctx->woke, 1);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_cond_broadcast_wakes_all(void)
@@ -1194,7 +1194,7 @@ static bool test_cond_broadcast_wakes_all(void)
     atomic_i32_store(&ctx.woke, 0);
 
     thread_t t[N];
-    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], bcast_waiter, &ctx, NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], bcast_waiter, &ctx, nullptr) == THREAD_SUCCESS);
     thread_sleep_ms(30);
 
     mutex_lock(&ctx.m);
@@ -1202,7 +1202,7 @@ static bool test_cond_broadcast_wakes_all(void)
     cond_broadcast(&ctx.c);
     mutex_unlock(&ctx.m);
 
-    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
     ASSERT(atomic_i32_load(&ctx.woke) == N);
     mutex_destroy(&ctx.m);
     cond_destroy(&ctx.c);
@@ -1237,7 +1237,7 @@ static void *late_signaller(void *p)
     ctx->ready = true;
     cond_signal(&ctx->c);
     mutex_unlock(&ctx->m);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_cond_timedwait_succeeds_before_deadline(void)
@@ -1248,7 +1248,7 @@ static bool test_cond_timedwait_succeeds_before_deadline(void)
     ctx.ready = false;
 
     thread_t t;
-    ASSERT(thread_create(&t, late_signaller, &ctx, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_create(&t, late_signaller, &ctx, nullptr) == THREAD_SUCCESS);
 
     mutex_lock(&ctx.m);
     int rc = COND_SUCCESS;
@@ -1257,7 +1257,7 @@ static bool test_cond_timedwait_succeeds_before_deadline(void)
     bool ready = ctx.ready;
     mutex_unlock(&ctx.m);
 
-    ASSERT(thread_join(t, NULL) == THREAD_SUCCESS);
+    ASSERT(thread_join(t, nullptr) == THREAD_SUCCESS);
     ASSERT(ready);
     mutex_destroy(&ctx.m);
     cond_destroy(&ctx.c);
@@ -1337,7 +1337,7 @@ static void *pc_producer(void *p)
     pc_arg_t *a = (pc_arg_t *)p;
     for (int i = 0; i < a->n; i++)
         pc_push(a->q, a->id * 1000000 + i);
-    return NULL;
+    return nullptr;
 }
 
 static void *pc_consumer(void *p)
@@ -1348,7 +1348,7 @@ static void *pc_consumer(void *p)
     {
         if (v < 0) atomic_i32_fetch_add(&a->q->fail, 1);
     }
-    return NULL;
+    return nullptr;
 }
 
 static bool test_cond_producer_consumer(void)
@@ -1365,10 +1365,10 @@ static bool test_cond_producer_consumer(void)
 
     thread_t pt[PRODUCERS], ct[CONSUMERS];
     pc_arg_t pa[PRODUCERS], ca[CONSUMERS];
-    for (int i = 0; i < CONSUMERS; i++) { ca[i].q = &q; ASSERT(thread_create(&ct[i], pc_consumer, &ca[i], NULL) == THREAD_SUCCESS); }
-    for (int i = 0; i < PRODUCERS; i++) { pa[i].q = &q; pa[i].n = PER_PRODUCER; pa[i].id = i + 1; ASSERT(thread_create(&pt[i], pc_producer, &pa[i], NULL) == THREAD_SUCCESS); }
+    for (int i = 0; i < CONSUMERS; i++) { ca[i].q = &q; ASSERT(thread_create(&ct[i], pc_consumer, &ca[i], nullptr) == THREAD_SUCCESS); }
+    for (int i = 0; i < PRODUCERS; i++) { pa[i].q = &q; pa[i].n = PER_PRODUCER; pa[i].id = i + 1; ASSERT(thread_create(&pt[i], pc_producer, &pa[i], nullptr) == THREAD_SUCCESS); }
 
-    for (int i = 0; i < PRODUCERS; i++) ASSERT(thread_join(pt[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < PRODUCERS; i++) ASSERT(thread_join(pt[i], nullptr) == THREAD_SUCCESS);
     
     for (;;)
     {
@@ -1379,7 +1379,7 @@ static bool test_cond_producer_consumer(void)
         thread_sleep_ms(1);
         cond_broadcast(&q.not_empty);
     }
-    for (int i = 0; i < CONSUMERS; i++) ASSERT(thread_join(ct[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < CONSUMERS; i++) ASSERT(thread_join(ct[i], nullptr) == THREAD_SUCCESS);
 
     ASSERT(q.produced_total == q.to_produce);
     ASSERT(q.consumed_total == q.to_produce);
@@ -1424,7 +1424,7 @@ static void *sem_taker(void *p)
     sem_ctx_t *c = (sem_ctx_t *)p;
     if (sem_wait(c->s) == SEM_SUCCESS)
         atomic_i32_fetch_add(&c->taken, 1);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_sem_wakes_exactly_n(void)
@@ -1435,11 +1435,11 @@ static bool test_sem_wakes_exactly_n(void)
     sem_ctx_t ctx = { &s, ATOMIC_INIT(0) };
 
     thread_t t[N];
-    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], sem_taker, &ctx, NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_create(&t[i], sem_taker, &ctx, nullptr) == THREAD_SUCCESS);
     thread_sleep_ms(30);                          
 
     for (int i = 0; i < N; i++) ASSERT(sem_post(&s) == SEM_SUCCESS);
-    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < N; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
 
     ASSERT(atomic_i32_load(&ctx.taken) == N);
     sem_destroy(&s);
@@ -1462,7 +1462,7 @@ static void *limit_worker(void *p)
         atomic_i32_fetch_sub(&c->inside, 1);
         sem_post(c->s);
     }
-    return NULL;
+    return nullptr;
 }
 
 static bool test_sem_bounds_concurrency(void)
@@ -1473,8 +1473,8 @@ static bool test_sem_bounds_concurrency(void)
     limit_ctx_t ctx = { &s, ATOMIC_INIT(0), ATOMIC_INIT(0), ATOMIC_INIT(0), ITERS };
 
     thread_t t[WORKERS];
-    for (int i = 0; i < WORKERS; i++) ASSERT(thread_create(&t[i], limit_worker, &ctx, NULL) == THREAD_SUCCESS);
-    for (int i = 0; i < WORKERS; i++) ASSERT(thread_join(t[i], NULL) == THREAD_SUCCESS);
+    for (int i = 0; i < WORKERS; i++) ASSERT(thread_create(&t[i], limit_worker, &ctx, nullptr) == THREAD_SUCCESS);
+    for (int i = 0; i < WORKERS; i++) ASSERT(thread_join(t[i], nullptr) == THREAD_SUCCESS);
 
     ASSERT(atomic_i32_load(&ctx.fail) == 0);
     ASSERT(atomic_i32_load(&ctx.max_seen) <= LIMIT);
@@ -1484,10 +1484,10 @@ static bool test_sem_bounds_concurrency(void)
 
 static bool test_map_basic(void)
 {
-    map_t m = map_new(0, NULL);
+    map_t m = map_new(0, nullptr);
     ASSERT(map_len(&m) == 0);
     ASSERT(!map_contains_cstr(&m, "a"));
-    ASSERT(map_get_cstr(&m, "a") == NULL);
+    ASSERT(map_get_cstr(&m, "a") == nullptr);
 
     ASSERT(map_set_cstr(&m, "a", (void *)(uintptr_t)1));
     ASSERT(map_set_cstr(&m, "b", (void *)(uintptr_t)2));
@@ -1523,20 +1523,20 @@ static bool test_map_basic(void)
 
 static bool test_map_null_value_disambiguation(void)
 {
-    map_t m = map_new(0, NULL);
-    ASSERT(map_set_cstr(&m, "k", NULL));
-    ASSERT(map_get_cstr(&m, "k") == NULL);              
+    map_t m = map_new(0, nullptr);
+    ASSERT(map_set_cstr(&m, "k", nullptr));
+    ASSERT(map_get_cstr(&m, "k") == nullptr);              
     ASSERT(map_contains_cstr(&m, "k"));                 
     void *v = (void *)1;
     ASSERT(map_try_get_cstr(&m, "k", &v));
-    ASSERT(v == NULL);
+    ASSERT(v == nullptr);
     map_free(&m);
     return true;
 }
 
 static bool test_map_binary_keys(void)
 {
-    map_t m = map_new(0, NULL);
+    map_t m = map_new(0, nullptr);
     char k1[] = { 0, 1, 2, 0, 3 };
     char k2[] = { 0, 1, 2, 0, 4 };                      
     ASSERT(map_set(&m, k1, sizeof(k1), (void *)(uintptr_t)11));
@@ -1552,7 +1552,7 @@ static bool test_map_binary_keys(void)
 static bool test_map_growth_and_rehash(void)
 {
     enum { N = 5000 };
-    map_t m = map_new(0, NULL);
+    map_t m = map_new(0, nullptr);
     char buf[32];
     for (int i = 0; i < N; i++)
     {
@@ -1573,7 +1573,7 @@ static bool test_map_growth_and_rehash(void)
 static bool test_map_collisions(void)
 {
     const size_t cap = 64;
-    map_t m = map_new(cap, NULL);
+    map_t m = map_new(cap, nullptr);
     ASSERT(m.cap == cap);                               
     size_t mask = cap - 1;
 
@@ -1615,7 +1615,7 @@ static bool test_map_collisions(void)
 
 static bool test_map_iterate(void)
 {
-    map_t m = map_new(0, NULL);
+    map_t m = map_new(0, nullptr);
     enum { N = 200 };
     bool seen[N];
     for (int i = 0; i < N; i++) seen[i] = false;
@@ -1645,9 +1645,9 @@ static bool test_map_iterate(void)
     for (int i = 0; i < N; i++) ASSERT(seen[i]);
 
     
-    map_t empty = map_new(0, NULL);
+    map_t empty = map_new(0, nullptr);
     size_t it2 = 0;
-    ASSERT(!map_iterate(&empty, &it2, NULL, NULL, NULL));
+    ASSERT(!map_iterate(&empty, &it2, nullptr, nullptr, nullptr));
     map_free(&empty);
     map_free(&m);
     return true;
@@ -1730,7 +1730,7 @@ static bool ref_remove(const char *key)
 
 static bool test_map_random_vs_reference(void)
 {
-    map_t m = map_new(0, NULL);
+    map_t m = map_new(0, nullptr);
     for (int i = 0; i < REF_CAP; i++) g_ref[i].used = false;
     g_ref_count = 0;
 
@@ -1774,7 +1774,7 @@ static bool test_map_random_vs_reference(void)
         ASSERT((long)(intptr_t)v == g_ref[i].value);
     }
     size_t it = 0; const char *k; void *v; int iter_count = 0;
-    while (map_iterate(&m, &it, &k, NULL, &v))
+    while (map_iterate(&m, &it, &k, nullptr, &v))
     {
         int i = ref_find(k);
         ASSERT(i >= 0);
@@ -1814,10 +1814,10 @@ DECONSTRUCTOR(Counted) { g_counted_destroyed++; }
 static bool test_oop_map_basic(void)
 {
     Map *m = NEW(Map);
-    ASSERT(m != NULL);
+    ASSERT(m != nullptr);
     ASSERT(CALL0(m, len) == 0);
     ASSERT(!CALL1(m, contains, "a"));
-    ASSERT(CALL1(m, get, "a") == NULL);
+    ASSERT(CALL1(m, get, "a") == nullptr);
 
     ASSERT(CALL2(m, set, "a", (void *)(uintptr_t)1));
     ASSERT(CALL2(m, set, "b", (void *)(uintptr_t)2));
@@ -1843,12 +1843,12 @@ static bool test_oop_map_basic(void)
 static bool test_oop_map_null_value_disambiguation(void)
 {
     Map *m = NEW(Map);
-    ASSERT(CALL2(m, set, "k", NULL));
-    ASSERT(CALL1(m, get, "k") == NULL);          
+    ASSERT(CALL2(m, set, "k", nullptr));
+    ASSERT(CALL1(m, get, "k") == nullptr);          
     ASSERT(CALL1(m, contains, "k"));             
     void *v = (void *)1;
     ASSERT(CALL2(m, try_get, "k", &v));
-    ASSERT(v == NULL);
+    ASSERT(v == nullptr);
     REMOVE(m);
     return true;
 }
@@ -1939,7 +1939,7 @@ METHOD_PROTO(IncTask, void *, run, (void *self));
 CONSTRUCTOR(IncTask)
 {
     SUPER_CTOR(self, Runnable);
-    self->counter = NULL;
+    self->counter = nullptr;
     self->n = 0;
     METHOD_LINK(base, IncTask, run);
 }
@@ -1967,7 +1967,7 @@ static bool test_oop_thread_runnable_basic(void)
     task->n = 1000;
 
     Thread *t = thread_new((Runnable *)task);
-    ASSERT(t != NULL);
+    ASSERT(t != nullptr);
     ASSERT(!CALL0(t, is_joinable));                
     ASSERT(CALL0(t, get_id) == 0);
     ASSERT(CALL0(t, start));
@@ -1996,7 +1996,7 @@ static bool test_oop_thread_fn(void)
     atomic_i32_init(&counter, 0);
 
     Thread *t = thread_new_fn(oop_thread_fn_task, &counter);
-    ASSERT(t != NULL);
+    ASSERT(t != nullptr);
     ASSERT(CALL0(t, start));
     void *result = CALL0(t, join);
     ASSERT((uintptr_t)result == 500);
@@ -2020,7 +2020,7 @@ static bool test_oop_thread_multiple_concurrent(void)
         tasks[i]->counter = &counter;
         tasks[i]->n = PER;
         t[i] = thread_new((Runnable *)tasks[i]);
-        ASSERT(t[i] != NULL);
+        ASSERT(t[i] != nullptr);
         ASSERT(CALL0(t[i], start));
     }
     for (int i = 0; i < NTHREADS; i++)
@@ -2038,7 +2038,7 @@ static void *oop_detached_task(void *arg)
     atomic_i32_t *flag = (atomic_i32_t *)arg;
     thread_sleep_ms(10);
     atomic_i32_store(flag, 1);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_oop_thread_start_detached(void)
@@ -2047,7 +2047,7 @@ static bool test_oop_thread_start_detached(void)
     atomic_i32_init(&flag, 0);
 
     Thread *t = thread_new_fn(oop_detached_task, &flag);
-    ASSERT(t != NULL);
+    ASSERT(t != nullptr);
     ASSERT(CALL0(t, start_detached));
     ASSERT(!CALL0(t, is_joinable));
     REMOVE(t);                                      
@@ -2064,7 +2064,7 @@ static void *oop_forgotten_task(void *arg)
     atomic_i32_t *flag = (atomic_i32_t *)arg;
     thread_sleep_ms(10);
     atomic_i32_store(flag, 1);
-    return NULL;
+    return nullptr;
 }
 
 static bool test_oop_thread_destructor_auto_detaches(void)
@@ -2107,9 +2107,9 @@ static bool test_oop_thread_reused_runnable(void)
 
 static bool test_oop_thread_start_guards(void)
 {
-    Thread *empty = thread_new(NULL);
+    Thread *empty = thread_new(nullptr);
     ASSERT(!CALL0(empty, start));                    
-    ASSERT(CALL0(empty, join) == NULL);               
+    ASSERT(CALL0(empty, join) == nullptr);               
     ASSERT(!CALL0(empty, detach));
     REMOVE(empty);
 
@@ -2141,8 +2141,8 @@ METHOD_PROTO(MapWriterTask, void *, run, (void *self));
 CONSTRUCTOR(MapWriterTask)
 {
     SUPER_CTOR(self, Runnable);
-    self->map = NULL;
-    self->lock = NULL;
+    self->map = nullptr;
+    self->lock = nullptr;
     self->key[0] = '\0';
     self->value = 0;
     METHOD_LINK(base, MapWriterTask, run);
@@ -2157,7 +2157,7 @@ IMPLEMENT(MapWriterTask, void *, run, (void *self))
     mutex_lock(this->lock);
     CALL2(this->map, set, this->key, (void *)(uintptr_t)this->value);
     mutex_unlock(this->lock);
-    return NULL;
+    return nullptr;
 }
 CLASS_INFO(MapWriterTask, Runnable);
 

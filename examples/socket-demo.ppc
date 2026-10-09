@@ -40,7 +40,7 @@ static void *server_thread_func(void *arg)
 {
     SocketDemo *self = (SocketDemo *)arg;
     CALL0(self, run_server);
-    return NULL;
+    return nullptr;
 }
 
 static void *client_thread_func(void *arg)
@@ -51,7 +51,7 @@ static void *client_thread_func(void *arg)
         thread_sleep_ms(10);
 
     CALL0(self, run_client);
-    return NULL;
+    return nullptr;
 }
 
 int program(parr_t csArgs)
@@ -67,7 +67,7 @@ int program(parr_t csArgs)
 #else
     SocketDemo *demo = NEW(SocketDemo);
 #endif
-    if (!demo)
+    if (demo == nullptr)
         return 1;
 
     Application *app = AS(Application, demo);
@@ -143,9 +143,8 @@ IMPLEMENT(SocketDemo, void, run_server, (void *self))
 
     SocketStream *listener = tcp_listen(SOCK_INADDR_ANY, port, 5);
     
-    if (!listener)
+    if (listener == nullptr)
     {
-
         CALL2(cout(), fprintf, "[Server] Failed to bind/listen on port %d.\n", port);
         return;
     }
@@ -157,7 +156,7 @@ IMPLEMENT(SocketDemo, void, run_server, (void *self))
     sock_addr_in_t peer_addr;
     Stream *client = tcp_accept(listener, &peer_addr);
 
-    if (client)
+    if (client != nullptr)
     {
         CALL1(cout(), fprintln, "[Server] Client connected!");
 
@@ -185,7 +184,7 @@ IMPLEMENT(SocketDemo, void, run_client, (void *self))
 
     Stream *conn = tcp_connect(host, port);
     
-    if (!conn)
+    if (conn == nullptr)
     {
         CALL1(cout(), fprintln, "[Client] Connection failed.");
         return;
@@ -198,6 +197,4 @@ IMPLEMENT(SocketDemo, void, run_client, (void *self))
     CALL2(cout(), fprintf, "[Client] Server says: %s\n", buf);
 
     CALL1(conn, fprint, "Hello from ++C Client!");
-
-    REMOVE(conn);
 }

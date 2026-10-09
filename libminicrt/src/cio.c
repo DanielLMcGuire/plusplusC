@@ -41,7 +41,7 @@ void sio_init(unsigned int out, unsigned int err)
 
 static int raw_print(const char *str, unsigned int stream)
 {
-    if (str == NULL) return -1;
+    if (str == nullptr) return -1;
 
 #ifdef __UEFI__
     __uefi_write(str, strlen(str), stream);
@@ -49,7 +49,7 @@ static int raw_print(const char *str, unsigned int stream)
     HANDLE handle = (stream == SIOOUT) ? g_out :
                     ((stream == SIOERR) ? g_err : INVALID_HANDLE_VALUE);
 
-    if (handle == INVALID_HANDLE_VALUE || handle == NULL) return -1;
+    if (handle == INVALID_HANDLE_VALUE || handle == nullptr) return -1;
 
     DWORD length = (DWORD)strlen(str);
     if (length == 0) return 1;
@@ -60,11 +60,11 @@ static int raw_print(const char *str, unsigned int stream)
 
     if (file_type == FILE_TYPE_CHAR && GetConsoleMode(handle, &console_mode))
     {
-        if (!WriteConsoleA(handle, str, length, &written, NULL)) return -1;
+        if (!WriteConsoleA(handle, str, length, &written, nullptr)) return -1;
     }
     else
     {
-        if (!WriteFile(handle, str, length, &written, NULL)) return -1;
+        if (!WriteFile(handle, str, length, &written, nullptr)) return -1;
     }
 
 #elif defined(XXC_RAWSYS)
@@ -85,7 +85,7 @@ static int raw_putchar(int c, unsigned int stream)
     HANDLE handle = (stream == SIOOUT) ? g_out :
                     ((stream == SIOERR) ? g_err : INVALID_HANDLE_VALUE);
 
-    if (handle == INVALID_HANDLE_VALUE || handle == NULL) return -1;
+    if (handle == INVALID_HANDLE_VALUE || handle == nullptr) return -1;
 
     char ch = (char)c;
     DWORD written = 0;
@@ -94,12 +94,12 @@ static int raw_putchar(int c, unsigned int stream)
 
     if (file_type == FILE_TYPE_CHAR && GetConsoleMode(handle, &console_mode))
     {
-        if (!WriteConsoleA(handle, &ch, 1, &written, NULL))
+        if (!WriteConsoleA(handle, &ch, 1, &written, nullptr))
             return -1;
     }
     else
     {
-        if (!WriteFile(handle, &ch, 1, &written, NULL)) 
+        if (!WriteFile(handle, &ch, 1, &written, nullptr)) 
             return -1;
     }
 
@@ -140,7 +140,7 @@ int vprintf(const char *fmt, va_list args, unsigned int stream)
     va_list args_copy;
     va_copy(args_copy, args);
 
-    int len = vsnprintf(NULL, 0, fmt, args);
+    int len = vsnprintf(nullptr, 0, fmt, args);
     /* GCOV_EXCL_START */
     if (len < 0)
     {
@@ -150,7 +150,7 @@ int vprintf(const char *fmt, va_list args, unsigned int stream)
     /* GCOV_EXCL_STOP */
 
     size_t size = (size_t)len + 1;
-    char *buf = NULL;
+    char *buf = nullptr;
     bool owns_buf = false;
 
     if (size < PRINTF_STACK_BUF_SIZE) 
@@ -214,7 +214,7 @@ int print_ds(dstr_t *s, unsigned int stream)
 
 void print_parr_c_string(const parr_t *csArr, unsigned int stream)
 {
-    if (!csArr) return;
+    if (csArr == nullptr) return;
 
     dstr_t out = dstr_new("[");
 
@@ -239,7 +239,7 @@ void print_parr_c_string(const parr_t *csArr, unsigned int stream)
 
 void print_parr_dstr(const parr_t *dsArr, unsigned int stream)
 {
-    if (!dsArr) return;
+    if (dsArr == nullptr) return;
 
     dstr_t out = dstr_new("[");
 

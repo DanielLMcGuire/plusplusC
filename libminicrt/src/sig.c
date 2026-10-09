@@ -28,18 +28,18 @@ typedef struct {
 
 void sigemptyset(sigset_t *set)
 {
-    if (set) set->bits = 0;
+    if (set != nullptr) set->bits = 0;
 }
 
 void sigaddset(sigset_t *set, int signum)
 {
-    if (!set || signum < 1 || signum > 64) return;
+    if (set == nullptr || signum < 1 || signum > 64) return;
     set->bits |= (u64)1 << (u64)(signum - 1);
 }
 
 int sigismember(const sigset_t *set, int signum)
 {
-    if (!set || signum < 1 || signum > 64) return 0;
+    if (set == nullptr || signum < 1 || signum > 64) return 0;
     return (int)((set->bits >> (u64)(signum - 1)) & 1);
 }
 
@@ -164,8 +164,8 @@ int raise(int sig)
 
 static sigaction_t g_sigactions[65];
 static SRWLOCK g_sig_lock = SRWLOCK_INIT;
-static int g_handlers_installed = 0;
-static PVOID g_veh_handle = NULL;
+static bool g_handlers_installed = false;
+static PVOID g_veh_handle = nullptr;
 
 static LONG WINAPI vectored_exc_handler(EXCEPTION_POINTERS *ExceptionInfo)
 {
@@ -247,7 +247,7 @@ static void ensure_win32_handlers(void)
     {
         SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
         g_veh_handle = AddVectoredExceptionHandler(1, vectored_exc_handler);
-        g_handlers_installed = 1;
+        g_handlers_installed = true;
     }
     ReleaseSRWLockExclusive(&g_sig_lock);
 }

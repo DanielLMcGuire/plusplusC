@@ -19,28 +19,28 @@ static inline char** GetArgvA(int* pArgc)
     int argc = 0;
     LPWSTR cmdLine = GetCommandLineW();
     LPWSTR* argvW = CommandLineToArgvW(cmdLine, &argc);
-    if (!argvW) 
+    if (argvW == nullptr) 
     {
         if (pArgc) *pArgc = 0;
-        return NULL; 
+        return nullptr; 
     }
 
     char** argv = (char**)malloc((argc + 1) * sizeof(char*));
 
-    if (!argv)
+    if (argv == nullptr)
     { 
         LocalFree(argvW); 
-        if (pArgc) *pArgc = 0; return NULL; 
+        if (pArgc) *pArgc = 0; return nullptr; 
     }
 
     for (int i = 0; i < argc; i++)
     {
-        int size = WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, NULL, 0, NULL, NULL);
+        int size = WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, nullptr, 0, nullptr, nullptr);
         argv[i] = (char*)malloc(size);
-        if (argv[i]) WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, argv[i], size, NULL, NULL);
+        if (argv[i]) WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, argv[i], size, nullptr, nullptr);
     }
 
-    argv[argc] = NULL;
+    argv[argc] = nullptr;
     LocalFree(argvW);
     if (pArgc) *pArgc = argc;
     return argv;

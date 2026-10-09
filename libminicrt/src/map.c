@@ -40,23 +40,23 @@ map_t map_new(size_t initial_cap, void (*value_free)(void *value))
     m.len = 0;
     m.value_free = value_free;
     m.entries = (map_entry_t *)calloc(m.cap, sizeof(map_entry_t));
-    if (!m.entries)
+    if (m.entries == nullptr)
         m.cap = 0;
     return m;
 }
 
 void map_free(map_t *m)
 {
-    if (!m) return;
+    if (m == nullptr) return;
     map_clear(m);
     free(m->entries);
-    m->entries = NULL;
+    m->entries = nullptr;
     m->cap = 0;
 }
 
 void map_clear(map_t *m)
 {
-    if (!m || !m->entries) return;
+    if (m == nullptr || m->entries == nullptr) return;
     for (size_t i = 0; i < m->cap; i++)
     {
         if (!m->entries[i].occupied) continue;
@@ -118,7 +118,7 @@ static bool grow(map_t *m)
 
     size_t new_cap = old_cap ? old_cap * 2 : MAP_DEFAULT_CAP;
     map_entry_t *fresh = (map_entry_t *)calloc(new_cap, sizeof(map_entry_t));
-    if (!fresh) return false;
+    if (fresh == nullptr) return false;
 
     m->entries = fresh;
     m->cap = new_cap;
@@ -132,8 +132,8 @@ static bool grow(map_t *m)
 
 bool map_set(map_t *m, const char *key, size_t key_len, void *value)
 {
-    if (!m) return false;
-    if (!m->entries && !grow(m)) return false;
+    if (m == nullptr) return false;
+    if (m->entries == nullptr && !grow(m)) return false;
 
     u64 hash = map_hash_bytes(key, key_len);
     bool found;
@@ -154,7 +154,7 @@ bool map_set(map_t *m, const char *key, size_t key_len, void *value)
     }
 
     char *owned = (char *)malloc(key_len + 1);
-    if (!owned) return false;
+    if (owned == nullptr) return false;
     memcpy(owned, key, key_len);
     owned[key_len] = '\0';
 
@@ -170,7 +170,7 @@ bool map_set_cstr(map_t *m, const char *key, void *value)
 
 bool map_try_get(const map_t *m, const char *key, size_t key_len, void **out)
 {
-    if (!m || !m->entries) return false;
+    if (m == nullptr || m->entries == nullptr) return false;
     u64 hash = map_hash_bytes(key, key_len);
     bool found;
     size_t i = probe(m, hash, key, key_len, &found);
@@ -186,7 +186,7 @@ bool map_try_get_cstr(const map_t *m, const char *key, void **out)
 
 void *map_get(const map_t *m, const char *key, size_t key_len)
 {
-    void *v = NULL;
+    void *v = nullptr;
     map_try_get(m, key, key_len, &v);
     return v;
 }
@@ -198,7 +198,7 @@ void *map_get_cstr(const map_t *m, const char *key)
 
 bool map_contains(const map_t *m, const char *key, size_t key_len)
 {
-    return map_try_get(m, key, key_len, NULL);
+    return map_try_get(m, key, key_len, nullptr);
 }
 
 bool map_contains_cstr(const map_t *m, const char *key)
@@ -208,7 +208,7 @@ bool map_contains_cstr(const map_t *m, const char *key)
 
 bool map_remove(map_t *m, const char *key, size_t key_len)
 {
-    if (!m || !m->entries) return false;
+    if (m == nullptr || m->entries == nullptr) return false;
     u64 hash = map_hash_bytes(key, key_len);
     bool found;
     size_t i = probe(m, hash, key, key_len, &found);
@@ -249,7 +249,7 @@ bool map_remove_cstr(map_t *m, const char *key)
 
 bool map_iterate(const map_t *m, size_t *cursor, const char **key_out, size_t *key_len_out, void **value_out)
 {
-    if (!m || !m->entries || !cursor) return false;
+    if (m == nullptr || m->entries == nullptr || cursor == nullptr) return false;
     for (size_t i = *cursor; i < m->cap; i++)
     {
         if (!m->entries[i].occupied) continue;

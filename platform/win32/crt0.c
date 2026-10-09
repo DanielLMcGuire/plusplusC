@@ -15,10 +15,10 @@ extern int atexit(atexit_func_t func);
 
 extern void pluspluscBoot(int argc, char **argv);
 
-extern XXC_DYN_IMPORT HANDLE heap;
+extern XXC_DYN_IMPORT HANDLE _xxc_w32_heap;
 
 int argc = 0;
-char **argv = NULL;
+char **argv = nullptr;
 
 volatile int _fltused = 0;
 
@@ -29,7 +29,7 @@ void freeArgs(void)
 
 XXC_NORETURN void start(void)
 {
-    heap = GetProcessHeap();
+    _xxc_w32_heap = GetProcessHeap();
     argv = GetArgvA(&argc);
     atexit(freeArgs);
     pluspluscBoot(argc, argv);

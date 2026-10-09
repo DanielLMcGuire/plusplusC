@@ -5,9 +5,9 @@ CLASS_INFO_ROOT(Display);
 bool display_init(Display *d)
 {
     EFI_GUID guid = EFI_GOP_GUID;
-    EFI_GOP *gop = NULL;
+    EFI_GOP *gop = nullptr;
 
-    if (__uefi_st->BootServices->LocateProtocol(&guid, NULL, (void **)&gop) != EFI_SUCCESS || !gop)
+    if (__uefi_st->BootServices->LocateProtocol(&guid, nullptr, (void **)&gop) != EFI_SUCCESS || !gop)
         return false;
 
     EFI_GOP_MODE_INFO *info = gop->Mode->Info;
@@ -47,7 +47,7 @@ IMPLEMENT(Display, void, fill_rect, (void *self, i32 x, i32 y, i32 w, i32 h, u32
 
 CONSTRUCTOR(Display)
 {
-    self->fb = NULL;
+    self->fb = nullptr;
     METHOD_LINK(Display, color);
     METHOD_LINK(Display, put);
     METHOD_LINK(Display, fill_rect);

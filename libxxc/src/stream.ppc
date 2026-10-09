@@ -78,7 +78,7 @@ IMPLEMENT(Stream, void, close, (void *self))
 IMPLEMENT(Stream, i64, fprint, (void *self, const char *str))
 {
     Stream *this = (Stream *)self;
-    if (!str) return 0;
+    if (str == nullptr) return 0;
     return this->write(self, str, strlen(str));
 }
 
@@ -86,12 +86,12 @@ IMPLEMENT(Stream, i64, fprintln, (void *self, const char *str))
 {
     Stream *this = (Stream *)self;
     
-    if (!str) 
+    if (str == nullptr) 
         return this->write(self, "\n", 1);
 
     size_t len = strlen(str);
     size_t total = len + 1;
-    char *buf = NULL;
+    char *buf = nullptr;
     bool owns_buf = false;
 
     if (total < STREAM_STACK_BUF_SIZE) 
@@ -104,7 +104,7 @@ IMPLEMENT(Stream, i64, fprintln, (void *self, const char *str))
         owns_buf = true;
     }
 
-    if (!buf) 
+    if (buf == nullptr) 
         return -1;
 
     memcpy(buf, str, len);
@@ -124,7 +124,7 @@ IMPLEMENT(Stream, int, fvprintf, (void *self, const char *fmt, va_list args))
     va_list args_copy;
     va_copy(args_copy, args);
 
-    int len = vsnprintf(NULL, 0, fmt, args);
+    int len = vsnprintf(nullptr, 0, fmt, args);
     /* GCOV_EXCL_START */
     if (len < 0)
     {
@@ -134,7 +134,7 @@ IMPLEMENT(Stream, int, fvprintf, (void *self, const char *fmt, va_list args))
     /* GCOV_EXCL_STOP */
 
     size_t size = (size_t)len + 1;
-    char *buf = NULL;
+    char *buf = nullptr;
     bool owns_buf = false;
 
     if (size < STREAM_STACK_BUF_SIZE) 
@@ -147,7 +147,7 @@ IMPLEMENT(Stream, int, fvprintf, (void *self, const char *fmt, va_list args))
         owns_buf = true;
     }
 
-    if (buf) 
+    if (buf != nullptr) 
     {
         vsnprintf(buf, size, fmt, args_copy);
         

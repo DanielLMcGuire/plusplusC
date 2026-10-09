@@ -19,8 +19,8 @@ typedef struct {
 static ArgFlag *argflag_new(const char *name, const char *description, bool has_value)
 {
     ArgFlag *flag = (ArgFlag *)calloc(1, sizeof(ArgFlag));
-    if (!flag)
-        return NULL;
+    if (flag == nullptr)
+        return nullptr;
 
     flag->name = dstr_new(name);
     flag->description = dstr_new(description);
@@ -33,7 +33,7 @@ static ArgFlag *argflag_new(const char *name, const char *description, bool has_
 
 static void argflag_free(ArgFlag *flag)
 {
-    if (!flag)
+    if (flag == nullptr)
         return;
 
     dstr_free(&flag->name);
@@ -46,7 +46,7 @@ CLASS_INFO_ROOT(ArgParser);
 
 CONSTRUCTOR(ArgParser)
 {
-    self->flags = parr_new(NULL, 0);
+    self->flags = parr_new(nullptr, 0);
     METHOD_LINK(ArgParser, add_flag);
     METHOD_LINK(ArgParser, add_value_flag);
     METHOD_LINK(ArgParser, parse);
@@ -72,7 +72,7 @@ static ArgFlag *argparser_find(ArgParser *this, const char *name)
             return flag;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void argparser_add(void *self, const char *name, const char *description, bool has_value)
@@ -80,7 +80,7 @@ static void argparser_add(void *self, const char *name, const char *description,
     ArgParser *this = (ArgParser *)self;
     ArgFlag *flag = argflag_new(name, description, has_value);
 
-    if (flag)
+    if (flag != nullptr)
         parr_append_val(&this->flags, flag);
 }
 
@@ -98,17 +98,17 @@ IMPLEMENT(ArgParser, void, parse, (void *self, const parr_t *argv))
 {
     ArgParser *this = (ArgParser *)self;
 
-    if (!argv)
+    if (argv == nullptr)
         return;
 
     for (size_t i = 1; i < argv->len; i++)
     {
         const char *arg = (const char *)argv->data[i];
-        if (!arg || arg[0] != '-' || arg[1] != '-')
+        if (arg == nullptr || arg[0] != '-' || arg[1] != '-')
             continue;
 
         ArgFlag *flag = argparser_find(this, arg + 2);
-        if (!flag)
+        if (flag == nullptr)
         {
             CALL2(cout(), fprintf, "Unknown option: %s\n", arg);
             continue;
@@ -129,7 +129,7 @@ IMPLEMENT(ArgParser, bool, get_bool, (void *self, const char *name))
 {
     ArgParser *this = (ArgParser *)self;
     ArgFlag *flag = argparser_find(this, name);
-    return flag ? flag->present : false;
+    return (flag != nullptr) ? flag->present : false;
 }
 
 IMPLEMENT(ArgParser, const char *, get_string, (void *self, const char *name, const char *default_value))
@@ -137,7 +137,7 @@ IMPLEMENT(ArgParser, const char *, get_string, (void *self, const char *name, co
     ArgParser *this = (ArgParser *)self;
     ArgFlag *flag = argparser_find(this, name);
 
-    if (flag && flag->present && flag->has_value)
+    if (flag != nullptr && flag->present && flag->has_value)
         return flag->value.data;
 
     return default_value;
@@ -151,11 +151,11 @@ IMPLEMENT(ArgParser, void, print_flags, (void *self))
     for (size_t i = 0; i < this->flags.len; i++)
     {
         ArgFlag *flag = (ArgFlag *)this->flags.data[i];
-        if (!flag)
+        if (flag == nullptr)
             continue;
 
         size_t width = 2;
-        if (flag->name.data)
+        if (flag->name.data != nullptr)
             width += flag->name.len;
         if (flag->has_value)
             width += 8;
@@ -167,11 +167,11 @@ IMPLEMENT(ArgParser, void, print_flags, (void *self))
     for (size_t i = 0; i < this->flags.len; i++)
     {
         ArgFlag *flag = (ArgFlag *)this->flags.data[i];
-        if (!flag)
+        if (flag == nullptr)
             continue;
 
         dstr_t left = dstr_new("--");
-        if (flag->name.data)
+        if (flag->name.data != nullptr)
             dstr_append(&left, flag->name.data);
         if (flag->has_value)
             dstr_append(&left, " <value>");

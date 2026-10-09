@@ -34,13 +34,13 @@ static const CHAR16 *uefi_get_image_filepath(const EFI_DEVICE_PATH_PROTOCOL *dp)
 
         dp = (const EFI_DEVICE_PATH_PROTOCOL *)((const char *)dp + len);
     }
-    return NULL;
+    return nullptr;
 }
 
 static void ucs2_to_ascii(const CHAR16 *src, char *dst, size_t max)
 {
     size_t i = 0;
-    if (!src || !dst || max == 0) return;
+    if (src == nullptr || dst == nullptr || max == 0) return;
 
     while (src[i] && i + 1 < max)
     {
@@ -73,7 +73,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 
     char app_path[256] = "";
     EFI_GUID lig = EFI_LOADED_IMAGE_GUID;
-    EFI_LOADED_IMAGE_PROTOCOL *li = NULL;
+    EFI_LOADED_IMAGE_PROTOCOL *li = nullptr;
 
     if (st->BootServices->HandleProtocol(image, &lig, (void **)&li) == EFI_SUCCESS && li && li->FilePath)
     {
