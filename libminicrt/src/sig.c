@@ -254,7 +254,7 @@ static void ensure_win32_handlers(void)
 
 int sigaction(int signum, const sigaction_t *act, sigaction_t *oldact)
 {
-    if (signum < 1 || signum > 64 || signum == SIGKILL || signum == SIGSTOP)
+    if (signum < 1 || signum >= NSIG || signum == SIGKILL || signum == SIGSTOP)
         return -1;
 
     ensure_win32_handlers();
@@ -290,11 +290,12 @@ sighandler_t signal(int signum, sighandler_t handler)
 
 int raise(int sig)
 {
-    if (sig < 1 || sig > 64) 
+    if (sig < 1 || sig >= NSIG)
         return -1;
 
     AcquireSRWLockShared(&g_sig_lock);
     sighandler_t handler = g_sigactions[sig].sa_handler;
+    unsigned long flags = g_sigactions[sig].sa_flags;
     ReleaseSRWLockShared(&g_sig_lock);
 
     if (handler == SIG_IGN)
@@ -302,6 +303,12 @@ int raise(int sig)
 
     if (handler != SIG_DFL)
     {
+        if (flags & SA_RESETHAND)
+        {
+            AcquireSRWLockExclusive(&g_sig_lock);
+            g_sigactions[sig].sa_handler = SIG_DFL;
+            ReleaseSRWLockExclusive(&g_sig_lock);
+        }
         handler(sig);
         return 0;
     }
