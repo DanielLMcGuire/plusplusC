@@ -8,7 +8,12 @@
 #include <def.h>
 
 typedef i32 proc_pid_t;
+
+#if defined(_WIN32)
+typedef intptr_t proc_fd_t;
+#else
 typedef int proc_fd_t;
+#endif
 
 #define PROC_FD_INVALID (-1)
 #define PROC_FD_INHERIT (-1)
@@ -23,6 +28,7 @@ typedef int proc_fd_t;
 #define PROC_EINVAL  22
 #define PROC_EMFILE  24
 #define PROC_EPIPE   32
+#define PROC_ENOMEM  12
 #if defined(__FreeBSD__)
 #define PROC_EAGAIN  35
 #define PROC_ENOSYS  78
