@@ -1,0 +1,744 @@
+// ++C Runtime Library
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <def.h>
+#include <cio.h>
+#include <str.h>
+#include <mem.h>
+#include <alloc.h>
+#include <atexit.h>
+#include <sig.h>
+#include <thread.h>
+#include <proc.h>
+#include <class.pph>
+#include <stream.pph>
+#include <runnable.pph>
+#include <process.pph>
+#include <ios.pph>
+#include "test.h"
+#include "test_util.h"
+
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <xxc_sys.h>
+
+static i64 read_all(Stream *s, char *buf, size_t cap)
+{
+    size_t total = 0;
+    for (;;)
+    {
+        i64 n = CALL2(s, read, buf + total, cap - 1 - total);
+        if (n <= 0)
+            break;
+        total += (size_t)n;
+    }
+    buf[total] = '\0';
+    return (i64)total;
+}
+
+static bool test_proc_pipe_roundtrip(void)
+{
+    proc_fd_t p[2] = { -7, -7 };
+
+    ASSERT(proc_pipe(nullptr, 0) == -PROC_EINVAL);
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+    ASSERT(p[0] >= 0 && p[1] >= 0 && p[0] != p[1]);
+
+    ASSERT(proc_write(p[1], "hello", 5) == 5);
+    ASSERT(proc_write(p[1], "x", 0) == 0);
+    ASSERT(proc_write(p[1], nullptr, 3) == -PROC_EINVAL);
+
+    char buf[16];
+    ASSERT(proc_read(p[0], buf, 0) == 0);
+    ASSERT(proc_read(p[0], nullptr, 4) == -PROC_EINVAL);
+    ASSERT(proc_read(p[0], buf, sizeof(buf)) == 5);
+    ASSERT(memcmp(buf, "hello", 5) == 0);
+
+    ASSERT(proc_close(p[1]) == 0);
+    ASSERT(proc_read(p[0], buf, sizeof(buf)) == 0);
+    ASSERT(proc_close(p[0]) == 0);
+
+    ASSERT(proc_read(p[0], buf, sizeof(buf)) < 0);
+    ASSERT(proc_write(p[1], "x", 1) < 0);
+    ASSERT(proc_close(p[0]) < 0);
+    return true;
+}
+
+static bool test_proc_pipe_nonblock_and_epipe(void)
+{
+    proc_fd_t p[2];
+    char c;
+
+    ASSERT(proc_pipe(p, PROC_PIPE_NONBLOCK) == 0);
+    ASSERT(proc_read(p[0], &c, 1) == -PROC_EAGAIN);
+
+    sighandler_t prev = signal(SIGPIPE, SIG_IGN);
+    proc_close(p[0]);
+    ASSERT(proc_write(p[1], "x", 1) == -PROC_EPIPE);
+    signal(SIGPIPE, prev);
+    proc_close(p[1]);
+    return true;
+}
+
+static bool test_proc_dup2(void)
+{
+    proc_fd_t p[2];
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+
+    ASSERT(proc_dup2(p[1], p[1]) == p[1]);
+    ASSERT(proc_dup2(-1, -1) < 0);
+
+    int target = p[1] + 5;
+    ASSERT(proc_dup2(p[1], target) == target);
+    ASSERT(proc_write(target, "z", 1) == 1);
+
+    char c = 0;
+    ASSERT(proc_read(p[0], &c, 1) == 1 && c == 'z');
+
+    proc_close(target);
+    proc_close(p[0]);
+    proc_close(p[1]);
+    return true;
+}
+
+static int child_exit42(void *arg)
+{
+    (void)arg;
+    return 42;
+}
+
+static bool test_proc_fork_exit_code(void)
+{
+    proc_pid_t pid = proc_fork();
+    if (pid == 0)
+        _exit(child_exit42(nullptr));
+
+    ASSERT(pid > 0);
+
+    proc_status_t st;
+    ASSERT(proc_wait(pid, &st, 0) == pid);
+    ASSERT(st.exited && st.exit_code == 42 && st.term_signal == 0);
+
+    ASSERT(proc_wait(pid, &st, 0) == -PROC_ECHILD);
+    ASSERT(proc_wait(pid, nullptr, PROC_WAIT_NOHANG) == -PROC_ECHILD);
+    return true;
+}
+
+static bool test_proc_fork_signal(void)
+{
+    proc_pid_t pid = proc_fork();
+    if (pid == 0)
+    {
+        proc_kill(proc_getpid(), SIGKILL);
+        _exit(0);
+    }
+
+    ASSERT(pid > 0);
+
+    proc_status_t st;
+    ASSERT(proc_wait(pid, &st, 0) == pid);
+    ASSERT(!st.exited && st.term_signal == SIGKILL && st.exit_code == 0);
+    return true;
+}
+
+static bool test_proc_fork_child_state(void)
+{
+    proc_fd_t p[2];
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+
+    proc_pid_t pid = proc_fork();
+    if (pid == 0)
+    {
+        int ok = thread_current_id() == (u32)proc_getpid() && proc_getpid() != 0;
+        char *m = (char *)malloc(100);
+        ok = ok && m != nullptr;
+        free(m);
+        proc_write(p[1], ok ? "1" : "0", 1);
+        printf("child says hi\n");
+        _exit(ok ? 0 : 1);
+    }
+
+    ASSERT(pid > 0);
+    ASSERT(pid != proc_getpid());
+    proc_close(p[1]);
+
+    char c = 0;
+    ASSERT(proc_read(p[0], &c, 1) == 1 && c == '1');
+    proc_close(p[0]);
+
+    proc_status_t st;
+    ASSERT(proc_wait(pid, &st, 0) == pid);
+    ASSERT(st.exited && st.exit_code == 0);
+    return true;
+}
+
+static bool test_proc_wait_nohang_and_kill(void)
+{
+    proc_fd_t p[2];
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+
+    proc_pid_t pid = proc_fork();
+    if (pid == 0)
+    {
+        char c;
+        proc_close(p[1]);
+        proc_read(p[0], &c, 1);
+        _exit(0);
+    }
+
+    ASSERT(pid > 0);
+    proc_close(p[0]);
+
+    proc_status_t st;
+    ASSERT(proc_wait(pid, &st, PROC_WAIT_NOHANG) == 0);
+    ASSERT(proc_kill(pid, 0) == 0);
+    ASSERT(proc_kill(0, 0) == -PROC_EINVAL);
+    ASSERT(proc_kill(-1, 0) == -PROC_EINVAL);
+
+    proc_close(p[1]);
+    ASSERT(proc_wait(pid, &st, 0) == pid);
+    ASSERT(st.exited && st.exit_code == 0);
+    return true;
+}
+
+static bool test_proc_spawn_validation(void)
+{
+    proc_pid_t pid = 0;
+    proc_spawn_t s = PROC_SPAWN_INIT;
+
+    ASSERT(proc_spawn(nullptr, &pid) == -PROC_EINVAL);
+    ASSERT(proc_spawn(&s, &pid) == -PROC_EINVAL);
+
+    s.path = "";
+    ASSERT(proc_spawn(&s, &pid) == -PROC_EINVAL);
+
+    s.path = "/bin/sh";
+    ASSERT(proc_spawn(&s, nullptr) == -PROC_EINVAL);
+
+    s.stdin_fd = 1;
+    ASSERT(proc_spawn(&s, &pid) == -PROC_EINVAL);
+    s.stdin_fd = -5;
+    ASSERT(proc_spawn(&s, &pid) == -PROC_EINVAL);
+    return true;
+}
+
+static bool test_proc_spawn_exec_and_redirect(void)
+{
+    proc_fd_t p[2];
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+
+    char *argv[] = { (char *)"sh", (char *)"-c", (char *)"echo out; exit 7", nullptr };
+    proc_spawn_t s = PROC_SPAWN_INIT;
+    s.path      = "/bin/sh";
+    s.argv      = argv;
+    s.stdout_fd = p[1];
+
+    proc_pid_t pid = 0;
+    ASSERT(proc_spawn(&s, &pid) == 0 && pid > 0);
+    proc_close(p[1]);
+
+    char buf[32];
+    i64 n = proc_read(p[0], buf, sizeof(buf) - 1);
+    ASSERT(n == 4);
+    ASSERT(memcmp(buf, "out\n", 4) == 0);
+    proc_close(p[0]);
+
+    proc_status_t st;
+    ASSERT(proc_wait(pid, &st, 0) == pid);
+    ASSERT(st.exited && st.exit_code == 7);
+
+    proc_spawn_t d = PROC_SPAWN_INIT;
+    d.path      = "/bin/true";
+    d.stdout_fd = 1;
+    ASSERT(proc_spawn(&d, &pid) == 0);
+    ASSERT(proc_wait(pid, &st, 0) == pid && st.exited);
+    return true;
+}
+
+static bool test_proc_spawn_failures(void)
+{
+    proc_pid_t pid = 0;
+    proc_spawn_t s = PROC_SPAWN_INIT;
+
+    s.path = "/nonexistent/prog";
+    ASSERT(proc_spawn(&s, &pid) == -PROC_ENOENT);
+
+    ASSERT(proc_wait(-1, nullptr, PROC_WAIT_NOHANG) == -PROC_ECHILD);
+
+    char *argv[] = { (char *)"nope-not-a-program", nullptr };
+    s.path  = "nope-not-a-program";
+    s.argv  = argv;
+    s.flags = PROC_SPAWN_SEARCH_PATH;
+    ASSERT(proc_spawn(&s, &pid) == -PROC_ENOENT);
+
+    proc_spawn_t r = PROC_SPAWN_INIT;
+    r.path      = "/bin/true";
+    r.stdout_fd = 900;
+    ASSERT(proc_spawn(&r, &pid) < 0);
+    return true;
+}
+
+static bool test_proc_spawn_search_path(void)
+{
+    proc_status_t st;
+    proc_pid_t pid = 0;
+
+    char *env1[]  = { (char *)"PATH=/nonexistent::/bin:/usr/bin", nullptr };
+    char *argv[]  = { (char *)"sh", (char *)"-c", (char *)"exit 3", nullptr };
+    proc_spawn_t s = PROC_SPAWN_INIT;
+    s.path  = "sh";
+    s.argv  = argv;
+    s.envp  = env1;
+    s.flags = PROC_SPAWN_SEARCH_PATH;
+    ASSERT(proc_spawn(&s, &pid) == 0);
+    ASSERT(proc_wait(pid, &st, 0) == pid && st.exited && st.exit_code == 3);
+
+    char *env2[] = { (char *)"HOME=/", nullptr };
+    s.envp = env2;
+    ASSERT(proc_spawn(&s, &pid) == 0);
+    ASSERT(proc_wait(pid, &st, 0) == pid && st.exited && st.exit_code == 3);
+
+    static char longenv[5200];
+    memcpy(longenv, "PATH=", 5);
+    memset(longenv + 5, 'a', 5100);
+    longenv[5105] = ':';
+    memcpy(longenv + 5106, "/bin", 5);
+    char *env3[] = { longenv, nullptr };
+    s.envp = env3;
+    ASSERT(proc_spawn(&s, &pid) == 0);
+    ASSERT(proc_wait(pid, &st, 0) == pid && st.exited && st.exit_code == 3);
+
+    long fd = sys_openat(AT_FDCWD, "xxc_test_proc.tmp", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT(fd >= 0);
+    sys_close((int)fd);
+
+    char *env4[] = { (char *)"PATH=.", nullptr };
+    char *argv4[] = { (char *)"xxc_test_proc.tmp", nullptr };
+    proc_spawn_t e = PROC_SPAWN_INIT;
+    e.path  = "xxc_test_proc.tmp";
+    e.argv  = argv4;
+    e.envp  = env4;
+    e.flags = PROC_SPAWN_SEARCH_PATH;
+    int rc = proc_spawn(&e, &pid);
+    sys_unlink("xxc_test_proc.tmp");
+    ASSERT(rc == -PROC_EACCES);
+    return true;
+}
+
+static bool test_processstream_pipe(void)
+{
+    Stream *r = nullptr, *w = nullptr;
+
+    ASSERT(!processstream_pipe(nullptr, &w));
+    ASSERT(!processstream_pipe(&r, nullptr));
+    ASSERT(processstream_pipe(&r, &w));
+    ASSERT(IS_A(r, ProcessStream) && IS_A(w, Stream));
+
+    ASSERT(CALL3(w, fprintf, "%s-%d", "abc", 12) == 6);
+    ASSERT(CALL1(w, fprintln, "!") == 2);
+
+    char buf[32];
+    ASSERT(CALL2(r, read, buf, sizeof(buf)) == 8);
+    ASSERT(memcmp(buf, "abc-12!\n", 8) == 0);
+    ASSERT(!CALL0(r, eof));
+
+    ASSERT(CALL2(r, write, "x", 1) < 0);
+    ASSERT(CALL2(w, read, buf, 1) < 0);
+    ASSERT(CALL2(r, read, nullptr, 4) == 0);
+    ASSERT(CALL2(r, read, buf, 0) == 0);
+    ASSERT(CALL2(w, write, nullptr, 4) == 0);
+    ASSERT(CALL2(w, seek, 0, FS_SEEK_SET) == -1);
+    ASSERT(CALL0(w, tell) == -1);
+
+    CALL0(w, close);
+    CALL0(w, close);
+    ASSERT(CALL2(w, write, "x", 1) < 0);
+
+    ASSERT(CALL2(r, read, buf, sizeof(buf)) == 0);
+    ASSERT(CALL0(r, eof) == 1);
+
+    CALL0(r, close);
+    ASSERT(CALL2(r, read, buf, 1) < 0);
+
+    REMOVE(r);
+    REMOVE(w);
+    return true;
+}
+
+static bool test_processstream_epipe_and_wrap(void)
+{
+    Stream *r = nullptr, *w = nullptr;
+    ASSERT(processstream_pipe(&r, &w));
+
+    sighandler_t prev = signal(SIGPIPE, SIG_IGN);
+    REMOVE(r);
+    ASSERT(CALL2(w, write, "x", 1) == -PROC_EPIPE);
+    signal(SIGPIPE, prev);
+    REMOVE(w);
+
+    proc_fd_t p[2];
+    ASSERT(proc_pipe(p, PROC_PIPE_CLOEXEC) == 0);
+    Stream *borrowed = processstream_wrap(p[1], false, true, false);
+    ASSERT(borrowed != nullptr);
+    ASSERT(CALL2(borrowed, write, "k", 1) == 1);
+    REMOVE(borrowed);
+
+    char c = 0;
+    ASSERT(proc_read(p[0], &c, 1) == 1 && c == 'k');
+    ASSERT(proc_close(p[1]) == 0);
+    proc_close(p[0]);
+    return true;
+}
+
+static bool test_process_capture_output(void)
+{
+    SCOPED_NEW(Process, dummy);
+    ASSERT(dummy != nullptr);
+    ASSERT(!CALL0(dummy, start));
+
+    Process *p = process_new("sh");
+    ASSERT(p != nullptr);
+    ASSERT(CALL1(p, add_arg, "-c"));
+    ASSERT(CALL1(p, add_arg, "echo hello; echo oops >&2; exit 3"));
+    ASSERT(!CALL1(p, add_arg, nullptr));
+    ASSERT(CALL1(p, redirect, PROCESS_STDOUT | PROCESS_STDERR));
+
+    ASSERT(!CALL0(p, wait) && !CALL0(p, poll) && !CALL0(p, is_running));
+    ASSERT(!CALL1(p, kill, SIGTERM));
+    ASSERT(CALL0(p, get_stdout) == nullptr);
+
+    ASSERT(CALL0(p, start));
+    ASSERT(!CALL0(p, start));
+    ASSERT(!CALL1(p, add_arg, "late") && !CALL1(p, redirect, 0));
+    ASSERT(CALL0(p, get_pid) > 0);
+    ASSERT(CALL0(p, get_stdin) == nullptr);
+
+    char out[64], err[64];
+    ASSERT(read_all(CALL0(p, get_stdout), out, sizeof(out)) == 6);
+    ASSERT(read_all(CALL0(p, get_stderr), err, sizeof(err)) == 5);
+    ASSERT_STR_EQ(out, "hello\n");
+    ASSERT_STR_EQ(err, "oops\n");
+
+    ASSERT(CALL0(p, wait));
+    ASSERT(CALL0(p, wait));
+    ASSERT(CALL0(p, get_exit_code) == 3 && CALL0(p, get_term_signal) == 0);
+    ASSERT(!CALL0(p, is_running) && CALL0(p, poll));
+    ASSERT(!CALL1(p, kill, SIGTERM));
+
+    REMOVE(p);
+    return true;
+}
+
+static bool test_process_stdin_roundtrip(void)
+{
+    SCOPED_NEW(Process, unused);
+    Process *p = process_new("cat");
+    ASSERT(p != nullptr);
+    ASSERT(CALL1(p, redirect, PROCESS_STDIN | PROCESS_STDOUT));
+    ASSERT(CALL0(p, start));
+
+    Stream *in = CALL0(p, get_stdin);
+    ASSERT(in != nullptr);
+    ASSERT(CALL2(in, fprintf, "ping %d", 7) == 6);
+
+    CALL0(p, close_stdin);
+    CALL0(p, close_stdin);
+
+    char out[32];
+    ASSERT(read_all(CALL0(p, get_stdout), out, sizeof(out)) == 6);
+    ASSERT_STR_EQ(out, "ping 7");
+
+    ASSERT(CALL0(p, wait) && CALL0(p, get_exit_code) == 0);
+    REMOVE(p);
+    return true;
+}
+
+static bool test_process_merge_stderr(void)
+{
+    Process *p = process_new("sh");
+    ASSERT(CALL1(p, add_arg, "-c"));
+    ASSERT(CALL1(p, add_arg, "echo a; echo b >&2"));
+    ASSERT(CALL1(p, redirect, PROCESS_MERGE_ERR));
+    ASSERT(CALL0(p, start));
+    ASSERT(CALL0(p, get_stderr) == nullptr);
+
+    char out[32];
+    read_all(CALL0(p, get_stdout), out, sizeof(out));
+    ASSERT_STR_EQ(out, "a\nb\n");
+    ASSERT(CALL0(p, wait) && CALL0(p, get_exit_code) == 0);
+    REMOVE(p);
+    return true;
+}
+
+static bool test_process_signal_and_poll(void)
+{
+    Process *p = process_new("cat");
+    ASSERT(CALL1(p, redirect, PROCESS_STDIN));
+    ASSERT(CALL0(p, start));
+
+    ASSERT(CALL0(p, is_running));
+    ASSERT(!CALL0(p, poll));
+    ASSERT(CALL1(p, kill, SIGKILL));
+
+    ASSERT(CALL0(p, wait));
+    ASSERT(CALL0(p, get_term_signal) == SIGKILL);
+    ASSERT(CALL0(p, get_exit_code) == -1);
+    ASSERT(!CALL0(p, is_running));
+    REMOVE(p);
+
+    Process *q = process_new("cat");
+    ASSERT(CALL1(q, redirect, PROCESS_STDIN));
+    ASSERT(CALL0(q, start));
+    CALL0(q, close_stdin);
+    for (int i = 0; i < 2000 && !CALL0(q, poll); i++)
+        thread_sleep_ms(5);
+    ASSERT(CALL0(q, poll) && CALL0(q, get_exit_code) == 0);
+    REMOVE(q);
+    return true;
+}
+
+static bool test_process_start_failures(void)
+{
+    ASSERT(process_new(nullptr) == nullptr);
+    ASSERT(process_new("") == nullptr);
+    ASSERT(process_new_runnable(nullptr) == nullptr);
+
+    Process *p = process_new("/nonexistent/prog");
+    ASSERT(CALL1(p, redirect, PROCESS_STDIN | PROCESS_STDOUT | PROCESS_STDERR));
+    ASSERT(!CALL0(p, start));
+    ASSERT(CALL0(p, get_pid) == -1 && CALL0(p, get_stdin) == nullptr);
+    ASSERT(!CALL0(p, is_running));
+    REMOVE(p);
+
+    Process *q = process_new("cat");
+    ASSERT(CALL1(q, redirect, PROCESS_STDIN));
+    ASSERT(CALL0(q, start));
+    proc_pid_t pid = CALL0(q, get_pid);
+    REMOVE(q);
+    ASSERT(proc_kill(pid, SIGKILL) == 0);
+    ASSERT(proc_wait(pid, nullptr, 0) == pid);
+    return true;
+}
+
+CLASS(ProcJob, Runnable)
+{
+    BASE(Runnable)
+    FIELD(int, code)
+    FIELD(bool, use_stdin)
+};
+
+CONSTRUCTOR(ProcJob);
+DECONSTRUCTOR(ProcJob);
+METHOD_PROTO(ProcJob, void *, run, (void *self));
+CLASS_INFO(ProcJob, Runnable);
+
+CONSTRUCTOR(ProcJob)
+{
+    SUPER_CTOR(self, Runnable);
+    self->code = 0;
+    self->use_stdin = false;
+    METHOD_LINK(base, ProcJob, run);
+}
+
+DECONSTRUCTOR(ProcJob)
+{
+    SUPER_DTOR(self, Runnable);
+}
+
+IMPLEMENT(ProcJob, void *, run, (void *self))
+{
+    ProcJob *this = (ProcJob *)self;
+
+    char line[8];
+    i64 n = this->use_stdin ? CALL2(cin(), read, line, sizeof(line) - 1) : 0;
+    char *copy = (char *)malloc(64);
+
+    printf("child:%d:", (int)n);
+    if (n > 0)
+    {
+        line[n] = '\0';
+        print(line, SIOOUT);
+    }
+    print("\n", SIOERR);
+    free(copy);
+
+    return (void *)(intptr_t)this->code;
+}
+
+static bool test_process_runnable(void)
+{
+    ProcJob *job = NEW(ProcJob);
+    job->code = 5;
+    job->use_stdin = true;
+
+    Process *p = process_new_runnable((Runnable *)job);
+    ASSERT(p != nullptr);
+    ASSERT(CALL1(p, redirect, PROCESS_STDIN | PROCESS_STDOUT | PROCESS_STDERR));
+    ASSERT(CALL0(p, start));
+
+    Stream *job_in = CALL0(p, get_stdin);
+    ASSERT(CALL2(job_in, write, "z", 1) == 1);
+    CALL0(p, close_stdin);
+
+    char out[32], err[32];
+    read_all(CALL0(p, get_stdout), out, sizeof(out));
+    read_all(CALL0(p, get_stderr), err, sizeof(err));
+    ASSERT_STR_EQ(out, "child:1:z");
+    ASSERT_STR_EQ(err, "\n");
+
+    ASSERT(CALL0(p, wait) && CALL0(p, get_exit_code) == 5);
+    REMOVE(p);
+
+    ProcJob *job2 = NEW(ProcJob);
+    Process *q = process_new_runnable((Runnable *)job2);
+    q->owns_target = true;
+    REMOVE(q);
+
+    ProcJob *job3 = NEW(ProcJob);
+    job3->code = 300;
+    Process *r = process_new_runnable((Runnable *)job3);
+    ASSERT(CALL1(r, redirect, PROCESS_STDOUT));
+    ASSERT(CALL0(r, start));
+    ASSERT(CALL0(r, wait));
+    ASSERT(CALL0(r, get_exit_code) == (300 & 0xff));
+    REMOVE(r);
+    REMOVE(job);
+    REMOVE(job3);
+    return true;
+}
+
+static int child_merge_job(void *arg)
+{
+    (void)arg;
+    return 0;
+}
+
+CLASS(MergeJob, Runnable)
+{
+    BASE(Runnable)
+};
+
+CONSTRUCTOR(MergeJob);
+DECONSTRUCTOR(MergeJob);
+METHOD_PROTO(MergeJob, void *, run, (void *self));
+CLASS_INFO(MergeJob, Runnable);
+
+CONSTRUCTOR(MergeJob)   { SUPER_CTOR(self, Runnable); METHOD_LINK(base, MergeJob, run); }
+DECONSTRUCTOR(MergeJob) { SUPER_DTOR(self, Runnable); }
+
+IMPLEMENT(MergeJob, void *, run, (void *self))
+{
+    (void)self;
+    print("o", SIOOUT);
+    print("e", SIOERR);
+    return (void *)(intptr_t)child_merge_job(nullptr);
+}
+
+static bool test_process_runnable_merge_stderr(void)
+{
+    MergeJob *job = NEW(MergeJob);
+    Process *p = process_new_runnable((Runnable *)job);
+    ASSERT(CALL1(p, redirect, PROCESS_MERGE_ERR));
+    ASSERT(CALL0(p, start));
+
+    char out[8];
+    read_all(CALL0(p, get_stdout), out, sizeof(out));
+    ASSERT_STR_EQ(out, "oe");
+    ASSERT(CALL0(p, wait) && CALL0(p, get_exit_code) == 0);
+    REMOVE(p);
+    REMOVE(job);
+    return true;
+}
+
+static int child_no_descriptors_proc(void *arg)
+{
+    (void)arg;
+    unsigned long saved[2];
+    if (syscall(__NR_getrlimit, 7L /* RLIMIT_NOFILE */, (long)saved) != 0)
+        return 10;
+    unsigned long none[2] = {0, saved[1]};
+    if (syscall(__NR_setrlimit, 7L, (long)none) != 0)
+        return 10;
+
+    int rc = 0;
+    proc_fd_t fds[2] = { -7, -7 };
+    Stream *r = nullptr, *w = nullptr;
+    proc_pid_t pid = 0;
+    proc_spawn_t s = PROC_SPAWN_INIT;
+    s.path = "/bin/true";
+
+    if (proc_pipe(fds, 0) != -PROC_EMFILE || fds[0] != -7)  rc = 11;
+    else if (processstream_pipe(&r, &w))                    rc = 12;
+    else if (proc_spawn(&s, &pid) != -PROC_EMFILE)          rc = 13;
+    else
+    {
+        Process *p = process_new("/bin/true");
+        if (p == nullptr || !CALL1(p, redirect, PROCESS_STDIN | PROCESS_STDOUT | PROCESS_STDERR))
+            rc = 14;
+        else if (CALL0(p, start) || CALL0(p, get_pid) != -1)
+            rc = 15;
+        REMOVE(p);
+    }
+
+    syscall(__NR_setrlimit, 7L, (long)saved);
+    return rc;
+}
+
+static bool test_proc_descriptor_exhaustion(void)
+{
+    ASSERT(run_in_child_quiet(child_no_descriptors_proc, nullptr) == 0);
+    return true;
+}
+
+static int child_process_oom(void *arg)
+{
+    (void)arg;
+    void *head = oom_begin();
+    int rc = 0;
+
+    Process *p = NEW(Process);
+    if (p != nullptr)
+        rc = 20;
+    if (process_new("cat") != nullptr)
+        rc = 21;
+
+    oom_end(head);
+    return rc;
+}
+
+static bool test_process_out_of_memory(void)
+{
+    ASSERT(run_in_child_quiet(child_process_oom, nullptr) == 0);
+    return true;
+}
+#endif /* __linux__ || __FreeBSD__ */
+
+static void run_proc_tests(void)
+{
+#if defined(__linux__) || defined(__FreeBSD__)
+    RUN_TEST(test_proc_pipe_roundtrip);
+    RUN_TEST(test_proc_pipe_nonblock_and_epipe);
+    RUN_TEST(test_proc_dup2);
+    RUN_TEST(test_proc_fork_exit_code);
+    RUN_TEST(test_proc_fork_signal);
+    RUN_TEST(test_proc_fork_child_state);
+    RUN_TEST(test_proc_wait_nohang_and_kill);
+    RUN_TEST(test_proc_spawn_validation);
+    RUN_TEST(test_proc_spawn_exec_and_redirect);
+    RUN_TEST(test_proc_spawn_failures);
+    RUN_TEST(test_proc_spawn_search_path);
+    RUN_TEST(test_processstream_pipe);
+    RUN_TEST(test_processstream_epipe_and_wrap);
+    RUN_TEST(test_process_capture_output);
+    RUN_TEST(test_process_stdin_roundtrip);
+    RUN_TEST(test_process_merge_stderr);
+    RUN_TEST(test_process_signal_and_poll);
+    RUN_TEST(test_process_start_failures);
+    RUN_TEST(test_process_runnable);
+    RUN_TEST(test_process_runnable_merge_stderr);
+#endif
+#if defined(__linux__)
+    RUN_TEST(test_proc_descriptor_exhaustion);
+    RUN_TEST(test_process_out_of_memory);
+#endif
+}

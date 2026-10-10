@@ -54,6 +54,11 @@ typedef struct {
 #define O_EXCL     0200
 #define O_TRUNC    01000
 #define O_APPEND   02000
+#define O_NONBLOCK 04000
+#define O_CLOEXEC  02000000
+
+#define XXC_SIGCHLD 17
+#define XXC_WNOHANG 1
 
 #define AT_FDCWD (-100)
 
@@ -91,10 +96,20 @@ void sys_exit_thread(int status);
 
 void __xxc_platform_init(int argc, char **argv);
 
+extern char **__xxc_environ;
+extern int    __xxc_dynamic_linked;
+void __xxc_run_exe_init_array(int argc, char **argv);
+
 long sys_rt_sigaction(int signum, const void *act, void *oldact, size_t sigsetsize);
 long sys_getpid(void);
 long sys_gettid(void);
 long sys_kill(long pid, int sig);
+
+long sys_pipe2(int fds[2], int flags);
+long sys_dup2(int oldfd, int newfd);
+long sys_fork(void);
+long sys_wait4(long pid, int *status, int options);
+long sys_execve(const char *path, char *const argv[], char *const envp[]);
 
 long sys_socket(int domain, int type, int protocol);
 long sys_bind(long sockfd, const void *addr, unsigned int addrlen);

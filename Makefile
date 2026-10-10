@@ -72,7 +72,7 @@ endif
 ifeq ($(COVERAGE),1)
   CFLAGS_BASE += -fprofile-arcs -ftest-coverage -fprofile-update=atomic
   COVRT_OBJ    = $(BUILD)/covrt.o
-  EXEC_LINK   += -Wl,--wrap=program -Wl,--wrap=syscall
+  EXEC_LINK   += -Wl,--wrap=syscall
   EXEC_LIBS    = $(COVRT_OBJ) -Wl,--whole-archive $(LIBXXC_A) $(LIBMINICRT_A) -Wl,--no-whole-archive $(EXTRA_LIBS)
   EXEC_DEPS   += $(COVRT_OBJ)
 

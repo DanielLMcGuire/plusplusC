@@ -30,6 +30,12 @@ static inline crt_lock_t *sio_lock_for(unsigned int stream)
     return (stream == SIOOUT) ? &g_stdout_lock : &g_stderr_lock;
 }
 
+void __xxc_cio_fork_child(void)
+{
+    __crt_lock_init(&g_stdout_lock);
+    __crt_lock_init(&g_stderr_lock);
+}
+
 void sio_init(unsigned int out, unsigned int err)
 {
 #ifdef _WIN32

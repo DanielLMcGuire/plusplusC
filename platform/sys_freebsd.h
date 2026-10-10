@@ -11,17 +11,21 @@
 #endif
 
 #define XXC_SYS_exit            1
+#define XXC_SYS_fork            2
 #define XXC_SYS_read            3
 #define XXC_SYS_write           4
 #define XXC_SYS_close           6
+#define XXC_SYS_wait4           7
 #define XXC_SYS_getpid          20
 #define XXC_SYS_recvfrom        29
 #define XXC_SYS_getpeername     31
 #define XXC_SYS_getsockname     32
 #define XXC_SYS_kill            37
+#define XXC_SYS_execve          59
 #define XXC_SYS_munmap          73
 #define XXC_SYS_mprotect        74
 #define XXC_SYS_madvise         75
+#define XXC_SYS_dup2            90
 #define XXC_SYS_socket          97
 #define XXC_SYS_connect         98
 #define XXC_SYS_bind            104
@@ -47,6 +51,7 @@
 #define XXC_SYS_openat          499
 #define XXC_SYS_unlinkat        503
 #define XXC_SYS_accept4         541
+#define XXC_SYS_pipe2           542
 
 #define PROT_NONE   0x0
 #define PROT_READ   0x1
@@ -91,6 +96,10 @@ typedef struct {
 #define O_CREAT    0x0200
 #define O_TRUNC    0x0400
 #define O_EXCL     0x0800
+#define O_NONBLOCK 0x0004
+#define O_CLOEXEC  0x00100000
+
+#define XXC_WNOHANG 1
 
 #define AT_FDCWD (-100)
 
@@ -127,6 +136,10 @@ void sys_exit_thread(int status);
 
 void __xxc_platform_init(int argc, char **argv);
 
+extern char **__xxc_environ;
+extern int    __xxc_dynamic_linked;
+void __xxc_run_exe_init_array(int argc, char **argv);
+
 typedef struct {
     u32 bits[4];
 } xxc_ksigset_t;
@@ -143,6 +156,12 @@ long sys_sigprocmask_block_all(void);
 long sys_getpid(void);
 long sys_gettid(void);
 long sys_kill(long pid, int sig);
+
+long sys_pipe2(int fds[2], int flags);
+long sys_dup2(int oldfd, int newfd);
+long sys_fork(void);
+long sys_wait4(long pid, int *status, int options);
+long sys_execve(const char *path, char *const argv[], char *const envp[]);
 
 long sys_socket(int domain, int type, int protocol);
 long sys_bind(long sockfd, const void *addr, unsigned int addrlen);

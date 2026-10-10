@@ -46,6 +46,9 @@ typedef struct { int r_version; xxc_link_map_t *r_map; } xxc_r_debug_t;
 __thread struct xxc_thread *__xxc_self;
 struct xxc_thread           __xxc_main_thread;
 
+char **__xxc_environ;
+int    __xxc_dynamic_linked;
+
 static struct {
     const char *image;
     size_t      filesz;
@@ -264,10 +267,65 @@ static int tls_snapshot_dynamic(int argc, char **argv)
     return 1;
 }
 
+#define DT_INIT_ARRAY   25
+#define DT_INIT_ARRAYSZ 27
+
+void __xxc_run_exe_init_array(int argc, char **argv)
+{
+    /* GCOV_EXCL_START: */
+#if defined(__linux__)
+    char **envp = argv + argc + 1;
+    while (*envp) envp++;
+    const unsigned long *av = (const unsigned long *)(envp + 1);
+
+    const xxc_phdr_t *ph = nullptr;
+    size_t phnum = 0;
+    for (; av[0] != AT_NULL; av += 2)
+    {
+        if (av[0] == AT_PHDR)  ph = (const xxc_phdr_t *)av[1];
+        if (av[0] == AT_PHNUM) phnum = (size_t)av[1];
+    }
+    if (ph == nullptr) return;
+
+    uintptr_t bias = 0;
+    for (size_t i = 0; i < phnum; i++)
+        if (ph[i].p_type == PT_PHDR) { bias = (uintptr_t)ph - (uintptr_t)ph[i].p_vaddr; break; }
+
+    for (size_t i = 0; i < phnum; i++)
+    {
+        if (ph[i].p_type != PT_DYNAMIC) continue;
+
+        void (**fns)(int, char **, char **) = nullptr;
+        size_t bytes = 0;
+
+        for (const xxc_dyn_t *d = (const xxc_dyn_t *)(bias + (uintptr_t)ph[i].p_vaddr); d->d_tag != 0; d++)
+        {
+            if (d->d_tag == DT_INIT_ARRAY)
+            {
+                uintptr_t a = (uintptr_t)d->d_val;
+                if (a < bias) a += bias;
+                fns = (void (**)(int, char **, char **))a;
+            }
+            if (d->d_tag == DT_INIT_ARRAYSZ) bytes = (size_t)d->d_val;
+        }
+
+        for (size_t n = 0; fns != nullptr && n < bytes / sizeof(*fns); n++)
+            fns[n](argc, argv, __xxc_environ);
+        return;
+    }
+#else
+    (void)argc; (void)argv;
+#endif
+    /* GCOV_EXCL_STOP */
+}
+
 void __xxc_platform_init(int argc, char **argv)
 {
+    __xxc_environ = argv + argc + 1;
+
     if (has_interp(argc, argv))
     {
+        __xxc_dynamic_linked = 1;
         (void)tls_snapshot_dynamic(argc, argv);
         struct xxc_thread *t = &__xxc_main_thread;
         t->self = t;

@@ -1,0 +1,434 @@
+// ++C Runtime Library (xxCRT)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <process.pph>
+#include <alloc.h>
+#include <atexit.h>
+
+CLASS_INFO_ROOT(Process);
+
+CONSTRUCTOR(Process)
+{
+    self->program       = (dstr_t){0};
+    self->args          = parr_new(nullptr, 0);
+    self->target        = nullptr;
+    self->owns_target   = false;
+    self->redirect_mask = 0;
+
+    self->child_stdin  = nullptr;
+    self->child_stdout = nullptr;
+    self->child_stderr = nullptr;
+
+    self->pid         = -1;
+    self->started     = false;
+    self->finished    = false;
+    self->exit_code   = -1;
+    self->term_signal = 0;
+
+    METHOD_LINK(Process, add_arg);
+    METHOD_LINK(Process, redirect);
+    METHOD_LINK(Process, start);
+    METHOD_LINK(Process, wait);
+    METHOD_LINK(Process, poll);
+    METHOD_LINK(Process, kill);
+    METHOD_LINK(Process, is_running);
+    METHOD_LINK(Process, get_pid);
+    METHOD_LINK(Process, get_exit_code);
+    METHOD_LINK(Process, get_term_signal);
+    METHOD_LINK(Process, get_stdin);
+    METHOD_LINK(Process, get_stdout);
+    METHOD_LINK(Process, get_stderr);
+    METHOD_LINK(Process, close_stdin);
+}
+
+DECONSTRUCTOR(Process)
+{
+    if (self->started && !self->finished)
+        Process__poll(self);
+
+    REMOVE(self->child_stdin);
+    REMOVE(self->child_stdout);
+    REMOVE(self->child_stderr);
+
+    if (self->owns_target)
+        REMOVE(self->target);
+
+    parr_free_c_strings(&self->args);
+    dstr_free(&self->program);
+}
+
+IMPLEMENT(Process, bool, add_arg, (void *self, const char *arg))
+{
+    Process *this = (Process *)self;
+
+    if (this->started || arg == nullptr || this->args.data == nullptr)
+        return false;
+
+    size_t before = this->args.len;
+    parr_append_cstr(&this->args, arg);
+
+    return this->args.len == before + 1;
+}
+
+IMPLEMENT(Process, bool, redirect, (void *self, u32 mask))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    this->redirect_mask = mask & (PROCESS_STDIN | PROCESS_STDOUT | PROCESS_STDERR | PROCESS_MERGE_ERR);
+    return true;
+}
+
+static void close_pair(proc_fd_t p[2])
+{
+    if (p[0] != PROC_FD_INVALID)
+        proc_close(p[0]);
+    if (p[1] != PROC_FD_INVALID)
+        proc_close(p[1]);
+
+    p[0] = p[1] = PROC_FD_INVALID;
+}
+
+static bool pair_clear_of_stdio(const proc_fd_t p[2])
+{
+    return p[0] > 2 && p[1] > 2;
+}
+
+static XXC_NORETURN void run_child(Process *p, u32 mask, bool merge,
+                                   proc_fd_t in_p[2], proc_fd_t out_p[2], proc_fd_t err_p[2])
+{
+    bool ok = true;
+
+    if (mask & PROCESS_STDIN)
+        ok = proc_dup2(in_p[0], 0) >= 0;
+
+    if (ok && (mask & PROCESS_STDOUT))
+    {
+        ok = proc_dup2(out_p[1], 1) >= 0;
+        if (ok && merge)
+            ok = proc_dup2(out_p[1], 2) >= 0;
+    }
+
+    if (ok && (mask & PROCESS_STDERR))
+        ok = proc_dup2(err_p[1], 2) >= 0;
+
+    close_pair(in_p);
+    close_pair(out_p);
+    close_pair(err_p);
+
+    int code = 127;
+
+    /* GCOV_EXCL_START */
+    if (ok)
+        code = (int)((intptr_t)CALL0(p->target, run) & 0xff);
+    /* GCOV_EXCL_STOP */
+
+    _exit(code);
+}
+
+IMPLEMENT(Process, bool, start, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    if (this->target == nullptr && this->program.data == nullptr)
+        return false;
+
+    const bool merge = (this->redirect_mask & PROCESS_MERGE_ERR) != 0;
+    u32 mask = this->redirect_mask;
+
+    if (merge)
+        mask = (mask | PROCESS_STDOUT) & ~PROCESS_STDERR;
+
+    /* [0] read end, [1] write end */
+    proc_fd_t in_p[2]  = { PROC_FD_INVALID, PROC_FD_INVALID };
+    proc_fd_t out_p[2] = { PROC_FD_INVALID, PROC_FD_INVALID };
+    proc_fd_t err_p[2] = { PROC_FD_INVALID, PROC_FD_INVALID };
+
+    ProcessStream *s_in  = nullptr;
+    ProcessStream *s_out = nullptr;
+    ProcessStream *s_err = nullptr;
+
+    char      **argv = nullptr;
+    proc_pid_t  pid  = -1;
+    bool        ok   = false;
+
+    if ((mask & PROCESS_STDIN) && proc_pipe(in_p, PROC_PIPE_CLOEXEC) < 0)
+        goto done;
+    if ((mask & PROCESS_STDOUT) && proc_pipe(out_p, PROC_PIPE_CLOEXEC) < 0)
+        goto done;
+    if ((mask & PROCESS_STDERR) && proc_pipe(err_p, PROC_PIPE_CLOEXEC) < 0)
+        goto done;
+
+    /* GCOV_EXCL_START */
+    if ((mask & PROCESS_STDIN)  && !pair_clear_of_stdio(in_p))  goto done;
+    if ((mask & PROCESS_STDOUT) && !pair_clear_of_stdio(out_p)) goto done;
+    if ((mask & PROCESS_STDERR) && !pair_clear_of_stdio(err_p)) goto done;
+    /* GCOV_EXCL_STOP */
+
+    if (mask & PROCESS_STDIN)
+    {
+        s_in = (ProcessStream *)processstream_wrap(PROC_FD_INVALID, false, true, true);
+        /* GCOV_EXCL_START */
+        if (s_in == nullptr)
+            goto done;
+        /* GCOV_EXCL_STOP */
+    }
+    if (mask & PROCESS_STDOUT)
+    {
+        s_out = (ProcessStream *)processstream_wrap(PROC_FD_INVALID, true, false, true);
+        /* GCOV_EXCL_START */
+        if (s_out == nullptr)
+            goto done;
+        /* GCOV_EXCL_STOP */
+    }
+    if (mask & PROCESS_STDERR)
+    {
+        s_err = (ProcessStream *)processstream_wrap(PROC_FD_INVALID, true, false, true);
+        /* GCOV_EXCL_START */
+        if (s_err == nullptr)
+            goto done;
+        /* GCOV_EXCL_STOP */
+    }
+
+    if (this->target == nullptr)
+    {
+        argv = (char **)malloc((this->args.len + 2) * sizeof(char *));
+        /* GCOV_EXCL_START */
+        if (argv == nullptr)
+            goto done;
+        /* GCOV_EXCL_STOP */
+
+        argv[0] = this->program.data;
+        for (size_t i = 0; i < this->args.len; i++)
+            argv[i + 1] = (char *)this->args.data[i];
+        argv[this->args.len + 1] = nullptr;
+
+        proc_spawn_t spec = PROC_SPAWN_INIT;
+        spec.path  = this->program.data;
+        spec.argv  = argv;
+        spec.flags = PROC_SPAWN_SEARCH_PATH;
+
+        if (mask & PROCESS_STDIN)
+            spec.stdin_fd = in_p[0];
+        if (mask & PROCESS_STDOUT)
+        {
+            spec.stdout_fd = out_p[1];
+            if (merge)
+                spec.stderr_fd = out_p[1];
+        }
+        if (mask & PROCESS_STDERR)
+            spec.stderr_fd = err_p[1];
+
+        if (proc_spawn(&spec, &pid) < 0)
+            goto done;
+    }
+    else
+    {
+        pid = proc_fork();
+
+        /* GCOV_EXCL_START */
+        if (pid < 0)
+            goto done;
+        /* GCOV_EXCL_STOP */
+
+        if (pid == 0)
+            run_child(this, mask, merge, in_p, out_p, err_p);
+    }
+
+    if (s_in != nullptr)
+    {
+        s_in->fd = in_p[1];
+        in_p[1]  = PROC_FD_INVALID;
+    }
+    if (s_out != nullptr)
+    {
+        s_out->fd = out_p[0];
+        out_p[0]  = PROC_FD_INVALID;
+    }
+    if (s_err != nullptr)
+    {
+        s_err->fd = err_p[0];
+        err_p[0]  = PROC_FD_INVALID;
+    }
+
+    this->child_stdin  = s_in;
+    this->child_stdout = s_out;
+    this->child_stderr = s_err;
+    s_in = s_out = s_err = nullptr;
+
+    this->pid         = pid;
+    this->started     = true;
+    this->finished    = false;
+    this->exit_code   = -1;
+    this->term_signal = 0;
+    ok = true;
+
+done:
+    close_pair(in_p);
+    close_pair(out_p);
+    close_pair(err_p);
+
+    REMOVE(s_in);
+    REMOVE(s_out);
+    REMOVE(s_err);
+    free(argv);
+
+    return ok;
+}
+
+static bool reap(Process *p, u32 flags)
+{
+    proc_status_t st;
+    proc_pid_t r = proc_wait(p->pid, &st, flags);
+
+    if (r == p->pid)
+    {
+        p->finished    = true;
+        p->exit_code   = st.exited ? st.exit_code : -1;
+        p->term_signal = st.term_signal;
+        return true;
+    }
+
+    /* GCOV_EXCL_START */
+    if (r == -PROC_ECHILD)
+    {
+        p->finished    = true;
+        p->exit_code   = -1;
+        p->term_signal = 0;
+    }
+    /* GCOV_EXCL_STOP */
+
+    return false;
+}
+
+IMPLEMENT(Process, bool, wait, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (!this->started)
+        return false;
+
+    if (this->finished)
+        return true;
+
+    return reap(this, 0);
+}
+
+IMPLEMENT(Process, bool, poll, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (!this->started)
+        return false;
+
+    if (this->finished)
+        return true;
+
+    return reap(this, PROC_WAIT_NOHANG);
+}
+
+IMPLEMENT(Process, bool, kill, (void *self, int sig))
+{
+    Process *this = (Process *)self;
+
+    if (!this->started || this->finished)
+        return false;
+
+    return proc_kill(this->pid, sig) == 0;
+}
+
+IMPLEMENT(Process, bool, is_running, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (!this->started || this->finished)
+        return false;
+
+    Process__poll(self);
+    return !this->finished;
+}
+
+IMPLEMENT(Process, proc_pid_t, get_pid, (void *self))
+{
+    return ((Process *)self)->pid;
+}
+
+IMPLEMENT(Process, int, get_exit_code, (void *self))
+{
+    return ((Process *)self)->exit_code;
+}
+
+IMPLEMENT(Process, int, get_term_signal, (void *self))
+{
+    return ((Process *)self)->term_signal;
+}
+
+IMPLEMENT(Process, Stream *, get_stdin, (void *self))
+{
+    return (Stream *)((Process *)self)->child_stdin;
+}
+
+IMPLEMENT(Process, Stream *, get_stdout, (void *self))
+{
+    return (Stream *)((Process *)self)->child_stdout;
+}
+
+IMPLEMENT(Process, Stream *, get_stderr, (void *self))
+{
+    return (Stream *)((Process *)self)->child_stderr;
+}
+
+IMPLEMENT(Process, void, close_stdin, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (this->child_stdin != nullptr)
+        ProcessStream__close(this->child_stdin);
+}
+
+Process *process_new(const char *program)
+{
+    if (program == nullptr || program[0] == '\0')
+        return nullptr;
+
+    Process *p = NEW(Process);
+
+    /* GCOV_EXCL_START */
+    if (p == nullptr)
+        return nullptr;
+    /* GCOV_EXCL_STOP */
+
+    p->program = dstr_new(program);
+
+    /* GCOV_EXCL_START */
+    if (p->program.data == nullptr)
+    {
+        REMOVE(p);
+        return nullptr;
+    }
+    /* GCOV_EXCL_STOP */
+
+    return p;
+}
+
+Process *process_new_runnable(Runnable *target)
+{
+    if (target == nullptr)
+        return nullptr;
+
+    Process *p = NEW(Process);
+
+    /* GCOV_EXCL_START */
+    if (p == nullptr)
+        return nullptr;
+    /* GCOV_EXCL_STOP */
+
+    p->target = target;
+    return p;
+}

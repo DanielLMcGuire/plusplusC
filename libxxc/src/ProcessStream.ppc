@@ -1,0 +1,151 @@
+// ++C Runtime Library (xxCRT)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <process.pph>
+
+CLASS_INFO(ProcessStream, Stream);
+
+CONSTRUCTOR(ProcessStream)
+{
+    SUPER_CTOR(self, Stream);
+
+    self->fd       = PROC_FD_INVALID;
+    self->owns_fd  = false;
+    self->eof_flag = false;
+    self->readable = false;
+    self->writable = false;
+
+    METHOD_LINK(base, ProcessStream, read);
+    METHOD_LINK(base, ProcessStream, write);
+    METHOD_LINK(base, ProcessStream, seek);
+    METHOD_LINK(base, ProcessStream, tell);
+    METHOD_LINK(base, ProcessStream, eof);
+    METHOD_LINK(base, ProcessStream, close);
+}
+
+DECONSTRUCTOR(ProcessStream)
+{
+    ProcessStream__close(self);
+
+    SUPER_DTOR(self, Stream);
+}
+
+IMPLEMENT(ProcessStream, i64, read, (void *self, void *buf, size_t n))
+{
+    ProcessStream *this = (ProcessStream *)self;
+
+    if (!this->readable || this->fd == PROC_FD_INVALID)
+        return -1;
+
+    if (buf == nullptr || n == 0)
+        return 0;
+
+    i64 r = proc_read(this->fd, buf, n);
+
+    if (r == 0)
+        this->eof_flag = true;
+
+    return r;
+}
+
+IMPLEMENT(ProcessStream, i64, write, (void *self, const void *buf, size_t n))
+{
+    ProcessStream *this = (ProcessStream *)self;
+
+    if (!this->writable || this->fd == PROC_FD_INVALID)
+        return -1;
+
+    if (buf == nullptr || n == 0)
+        return 0;
+
+    return proc_write(this->fd, buf, n);
+}
+
+IMPLEMENT(ProcessStream, i64, seek, (void *self, i64 offset, int whence))
+{
+    (void)self;
+    (void)offset;
+    (void)whence;
+
+    return -1;
+}
+
+IMPLEMENT(ProcessStream, i64, tell, (void *self))
+{
+    (void)self;
+
+    return -1;
+}
+
+IMPLEMENT(ProcessStream, int, eof, (void *self))
+{
+    ProcessStream *this = (ProcessStream *)self;
+
+    return this->eof_flag ? 1 : 0;
+}
+
+IMPLEMENT(ProcessStream, void, close, (void *self))
+{
+    ProcessStream *this = (ProcessStream *)self;
+
+    if (this->owns_fd && this->fd != PROC_FD_INVALID)
+        proc_close(this->fd);
+
+    this->fd = PROC_FD_INVALID;
+}
+
+static ProcessStream *wrap(proc_fd_t fd, bool readable, bool writable, bool owns_fd)
+{
+    ProcessStream *ps = NEW(ProcessStream);
+
+    if (ps == nullptr)
+        return nullptr;
+
+    ps->fd       = fd;
+    ps->readable = readable;
+    ps->writable = writable;
+    ps->owns_fd  = owns_fd;
+
+    return ps;
+}
+
+Stream *processstream_wrap(proc_fd_t fd, bool readable, bool writable, bool owns_fd)
+{
+    return (Stream *)wrap(fd, readable, writable, owns_fd);
+}
+
+bool processstream_pipe(Stream **reader, Stream **writer)
+{
+    if (reader == nullptr || writer == nullptr)
+        return false;
+
+    proc_fd_t fds[2];
+
+    if (proc_pipe(fds, PROC_PIPE_CLOEXEC) < 0)
+        return false;
+
+    ProcessStream *r = wrap(fds[0], true, false, true);
+    ProcessStream *w = wrap(fds[1], false, true, true);
+
+    /* GCOV_EXCL_START */
+    if (r == nullptr || w == nullptr)
+    {
+        if (r != nullptr)
+            REMOVE(r);
+        else
+            proc_close(fds[0]);
+
+        if (w != nullptr)
+            REMOVE(w);
+        else
+            proc_close(fds[1]);
+
+        return false;
+    }
+    /* GCOV_EXCL_STOP */
+
+    *reader = (Stream *)r;
+    *writer = (Stream *)w;
+    return true;
+}

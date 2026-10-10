@@ -3,7 +3,6 @@
 
 #include <def.h>
 #include <asm/unistd.h>
-#include <parr.h>
 
 #if __GNUC__ >= 15
 #define GCOV_COUNTERS 10
@@ -14,8 +13,6 @@
 #else
 #error "covrt.c requires GCC 12 or newer"
 #endif
-
-typedef long long s64;
 
 #define TAG_FUNCTION 0x01000000u
 #define TAG_COUNTER_BASE 0x01a10000u
@@ -55,7 +52,7 @@ static struct gcov_info *g_list;
 
 void __gcov_init(struct gcov_info *info)
 {
-    if (info  || !info->version || !info->n_functions)
+    if (!info || !info->version || !info->n_functions)
         return;
 
     info->next = g_list;
@@ -318,23 +315,7 @@ static void cov_dump(void)
         dump_one(gi);
 }
 
-extern void (*__init_array_start[])(void);
-extern void (*__init_array_end[])(void);
-
-extern int __real_program(parr_t args);
-
 extern long __real_syscall(long n, long a, long b, long c, long d, long e, long f);
-
-int __wrap_program(parr_t args)
-{
-    for (void (**f)(void) = __init_array_start;
-         f < __init_array_end;
-         f++
-    )
-        (*f)();
-
-    return __real_program(args);
-}
 
 long __wrap_syscall(long n, long a, long b, long c, long d, long e, long f)
 {

@@ -1,53 +1,4 @@
 if (NOT TARGET minicrt)
-    set(MINICRT_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/crt1.c
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/def.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/alloc.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/alloc.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/atexit.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/atexit.h
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/str.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/str.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/mem.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/mem.h
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/sig.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/sig.h
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/sock.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/sock.h
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/mutex.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/mutex.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/atomic.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/thread.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/thread.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cond.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/cond.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/sem.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/sem.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/clock.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/clock.h
-        $<$<PLATFORM_ID:Windows>:${CMAKE_CURRENT_SOURCE_DIR}/../platform/win32/emutls.c>
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/dstr.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/dstr.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/iarr.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/iarr.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/parr.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/parr.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/map.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/map.h
-
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/format.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cio.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/cio.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/path.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/path.h
-    )
-
     set(MINICRT_CORE_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/include/def.h
         ${CMAKE_CURRENT_SOURCE_DIR}/src/alloc.c
@@ -93,11 +44,9 @@ if (NOT TARGET minicrt)
         ${CMAKE_CURRENT_SOURCE_DIR}/include/cio.h
         ${CMAKE_CURRENT_SOURCE_DIR}/src/path.c
         ${CMAKE_CURRENT_SOURCE_DIR}/include/path.h
-    )
 
-    set(MINICRT_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/crt1.c
-        ${MINICRT_CORE_SOURCES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/proc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/proc.h
     )
 
     add_library(minicrt_objects OBJECT ${MINICRT_CORE_SOURCES})

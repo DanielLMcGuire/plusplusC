@@ -10,6 +10,8 @@ if (NOT TARGET xxc)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Map.ppc
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Runnable.ppc
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Thread.ppc
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ProcessStream.ppc
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.ppc
     )
     set_source_files_properties(${XXC_SOURCES} PROPERTIES LANGUAGE C)
 
@@ -35,6 +37,7 @@ if (NOT TARGET xxc)
         ${CMAKE_CURRENT_SOURCE_DIR}/include/map.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/runnable.pph
         ${CMAKE_CURRENT_SOURCE_DIR}/include/thread.pph
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/process.pph
     )
     add_library(xxc::xxc ALIAS xxc)
 

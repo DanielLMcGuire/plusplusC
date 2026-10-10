@@ -1,0 +1,98 @@
+// ++C Runtime Library (xxCRT)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#ifndef PROCESS_H
+#define PROCESS_H
+
+#include <def.h>
+#include <class.pph>
+#include <stream.pph>
+#include <runnable.pph>
+#include <dstr.h>
+#include <parr.h>
+#include <proc.h>
+
+CLASS(ProcessStream, Stream)
+{
+    BASE(Stream)
+    FIELD(proc_fd_t, fd)
+    FIELD(bool,      owns_fd)
+    FIELD(bool,      eof_flag)
+    FIELD(bool,      readable)
+    FIELD(bool,      writable)
+};
+
+CLASS_EXPORT(ProcessStream);
+
+METHOD_PROTO(ProcessStream, i64,  read,  (void *self, void *buf, size_t n));
+METHOD_PROTO(ProcessStream, i64,  write, (void *self, const void *buf, size_t n));
+METHOD_PROTO(ProcessStream, i64,  seek,  (void *self, i64 offset, int whence));
+METHOD_PROTO(ProcessStream, i64,  tell,  (void *self));
+METHOD_PROTO(ProcessStream, int,  eof,   (void *self));
+METHOD_PROTO(ProcessStream, void, close, (void *self));
+
+bool processstream_pipe(Stream **reader, Stream **writer);
+
+Stream *processstream_wrap(proc_fd_t fd, bool readable, bool writable, bool owns_fd);
+
+#define PROCESS_STDIN     0x1u
+#define PROCESS_STDOUT    0x2u
+#define PROCESS_STDERR    0x4u
+#define PROCESS_MERGE_ERR 0x8u
+
+CLASS(Process)
+{
+    FIELD(dstr_t,          program)
+    FIELD(parr_t,          args)
+    FIELD(Runnable *,      target)
+    FIELD(bool,            owns_target)
+    FIELD(u32,             redirect_mask)
+
+    FIELD(ProcessStream *, child_stdin)
+    FIELD(ProcessStream *, child_stdout)
+    FIELD(ProcessStream *, child_stderr)
+
+    FIELD(proc_pid_t,      pid)
+    FIELD(bool,            started)
+    FIELD(bool,            finished)
+    FIELD(int,             exit_code)
+    FIELD(int,             term_signal)
+
+    METHOD(bool,           add_arg,         (void *self, const char *arg))
+    METHOD(bool,           redirect,        (void *self, u32 mask))
+    METHOD(bool,           start,           (void *self))
+    METHOD(bool,           wait,            (void *self))
+    METHOD(bool,           poll,            (void *self))
+    METHOD(bool,           kill,            (void *self, int sig))
+    METHOD(bool,           is_running,      (void *self))
+    METHOD(proc_pid_t,     get_pid,         (void *self))
+    METHOD(int,            get_exit_code,   (void *self))
+    METHOD(int,            get_term_signal, (void *self))
+    METHOD(Stream *,       get_stdin,       (void *self))
+    METHOD(Stream *,       get_stdout,      (void *self))
+    METHOD(Stream *,       get_stderr,      (void *self))
+    METHOD(void,           close_stdin,     (void *self))
+};
+
+CLASS_EXPORT(Process);
+
+METHOD_PROTO(Process, bool,           add_arg,         (void *self, const char *arg));
+METHOD_PROTO(Process, bool,           redirect,        (void *self, u32 mask));
+METHOD_PROTO(Process, bool,           start,           (void *self));
+METHOD_PROTO(Process, bool,           wait,            (void *self));
+METHOD_PROTO(Process, bool,           poll,            (void *self));
+METHOD_PROTO(Process, bool,           kill,            (void *self, int sig));
+METHOD_PROTO(Process, bool,           is_running,      (void *self));
+METHOD_PROTO(Process, proc_pid_t,     get_pid,         (void *self));
+METHOD_PROTO(Process, int,            get_exit_code,   (void *self));
+METHOD_PROTO(Process, int,            get_term_signal, (void *self));
+METHOD_PROTO(Process, Stream *,       get_stdin,       (void *self));
+METHOD_PROTO(Process, Stream *,       get_stdout,      (void *self));
+METHOD_PROTO(Process, Stream *,       get_stderr,      (void *self));
+METHOD_PROTO(Process, void,           close_stdin,     (void *self));
+
+Process *process_new(const char *program);
+Process *process_new_runnable(Runnable *target);
+
+#endif /* PROCESS_H */

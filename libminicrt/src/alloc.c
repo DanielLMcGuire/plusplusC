@@ -83,6 +83,10 @@ void* realloc(void *block, size_t size)
         return nullptr;
     }
 
+    SIZE_T have = HeapSize(_xxc_w32_heap, 0, block);
+    if (have != (SIZE_T)-1 && (SIZE_T)size <= have)
+        return block;
+
     return HeapReAlloc(_xxc_w32_heap, 0, block, (SIZE_T)size);
 }
 #elif defined(XXC_RAWSYS)

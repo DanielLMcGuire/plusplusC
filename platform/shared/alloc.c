@@ -261,6 +261,16 @@ static XXC_NOINLINE xxc_heap *heap_acquire(void)
     return h;
 }
 
+void __xxc_heap_fork_prepare(void)
+{
+    __crt_lock_acquire(&g_lock);
+}
+
+void __xxc_heap_fork_release(void)
+{
+    __crt_lock_release(&g_lock);
+}
+
 void __xxc_heap_thread_exit(void)
 {
     xxc_heap *h = t_heap;

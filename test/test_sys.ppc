@@ -18,6 +18,46 @@
 #include "test.h"
 #include "test_util.h"
 
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <xxc_sys.h>
+
+static int    g_init_log[3];
+static int    g_init_count;
+static int    g_init_argc;
+static char **g_init_argv;
+static char **g_init_envp;
+
+static void init_late(void) __attribute__((constructor));
+static void init_mid(void) __attribute__((constructor(200)));
+static void init_early(void) __attribute__((constructor(150)));
+static void init_args(int argc, char **argv, char **envp) __attribute__((constructor(300)));
+
+static void init_late(void)  { g_init_log[g_init_count++] = 3; }
+static void init_mid(void)   { g_init_log[g_init_count++] = 2; }
+static void init_early(void) { g_init_log[g_init_count++] = 1; }
+static void init_args(int argc, char **argv, char **envp)
+{
+    g_init_argc = argc;
+    g_init_argv = argv;
+    g_init_envp = envp;
+}
+
+static bool test_init_array_runs_constructors(void)
+{
+    ASSERT(g_init_count == 3);
+    ASSERT(g_init_log[0] == 1 && g_init_log[1] == 2 && g_init_log[2] == 3);
+    return true;
+}
+
+static bool test_init_array_receives_arguments(void)
+{
+    ASSERT(g_init_argc >= 1 && g_init_argv != nullptr && g_init_argv[g_init_argc] == nullptr);
+    ASSERT(g_init_envp == g_init_argv + g_init_argc + 1);
+    ASSERT(g_init_envp == __xxc_environ);
+    return true;
+}
+#endif
+
 static volatile int g_sig_count = 0;
 static volatile int g_sig_last = 0;
 
@@ -535,6 +575,10 @@ static bool test_socketstream_descriptor_exhaustion(void)
 
 static void run_sys_tests(void)
 {
+#if defined(__linux__) || defined(__FreeBSD__)
+    RUN_TEST(test_init_array_runs_constructors);
+    RUN_TEST(test_init_array_receives_arguments);
+#endif
 
     RUN_TEST(test_signal_set_and_raise);
     RUN_TEST(test_signal_invalid_arguments);

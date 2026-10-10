@@ -16,7 +16,7 @@ void* realloc(void *block, size_t size);
 void free(void *block);
 
 #if defined(__GNUC__) || defined(__clang__) 
-#define alloca(size) __builtin_alloca(size);
+#define alloca(size) __builtin_alloca(size)
 #elif _MSC_VER
 #define alloca _alloca
 #endif

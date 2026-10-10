@@ -155,7 +155,7 @@ void parr_free(parr_t *arr)
 
 void parr_free_c_strings(parr_t *csArr) 
 {
-    if (csArr == nullptr || csArr->data ) return;
+    if (csArr == nullptr || csArr->data == nullptr) return;
     for (size_t i = 0; i < csArr->len; i++) 
         if (csArr->data[i] != nullptr)
             free(csArr->data[i]);

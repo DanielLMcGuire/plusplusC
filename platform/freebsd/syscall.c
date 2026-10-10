@@ -61,6 +61,31 @@ long sys_kill(long pid, int sig)
     return syscall(XXC_SYS_kill, pid, (long)sig);
 }
 
+long sys_pipe2(int fds[2], int flags)
+{
+    return syscall(XXC_SYS_pipe2, (long)fds, (long)flags);
+}
+
+long sys_dup2(int oldfd, int newfd)
+{
+    return syscall(XXC_SYS_dup2, (long)oldfd, (long)newfd);
+}
+
+long sys_fork(void)
+{
+    return syscall(XXC_SYS_fork);
+}
+
+long sys_wait4(long pid, int *status, int options)
+{
+    return syscall(XXC_SYS_wait4, pid, (long)status, (long)options, 0L);
+}
+
+long sys_execve(const char *path, char *const argv[], char *const envp[])
+{
+    return syscall(XXC_SYS_execve, (long)path, (long)argv, (long)envp);
+}
+
 void sys_exit(int status)
 {
     (void)syscall(XXC_SYS_exit, (long)status);

@@ -10,6 +10,7 @@ static int g_tests_passed = 0;
 #include "test_core.ppc"
 #include "test_xxc.ppc"
 #include "test_sys.ppc"
+#include "test_proc.ppc"
 
 int program(parr_t args)
 {
@@ -93,6 +94,7 @@ int program(parr_t args)
     run_core_tests();
     run_xxc_tests();
     run_sys_tests();
+    run_proc_tests();
 
     if (g_tests_passed == g_tests_run)
     {

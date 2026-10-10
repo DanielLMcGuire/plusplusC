@@ -2,7 +2,7 @@
 # Licensed under the MIT License
 
 XXC_SRC_NAMES := app argparse stream FileStream FSPath MemoryStream socket \
-                 Map Runnable Thread
+                 Map Runnable Thread ProcessStream Process
 XXC_SRCS := $(addprefix libxxc/src/,$(addsuffix .ppc,$(XXC_SRC_NAMES)))
 XXC_OBJS := $(call objs,$(XXC_SRCS))
 

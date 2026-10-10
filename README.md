@@ -441,6 +441,68 @@ void thread_demo(void)
 }
 ```
 
+### Processes and pipes
+
+```c
+#include <process.pph>
+#include <ios.pph>
+#include <sig.h>
+#include <cio.h>
+
+void process_demo(void)
+{
+    // run a program, feed its stdin and read its stdout
+    Process *p = process_new("sort"); // looked up in PATH
+    CALL1(p, redirect, PROCESS_STDIN | PROCESS_STDOUT);
+
+    if (CALL0(p, start))
+    {
+        Stream *in = CALL0(p, get_stdin);
+        CALL1(in, fprint, "pear\napple\n");
+        CALL0(p, close_stdin); // the child now sees end-of-file
+
+        char buf[64];
+        i64 n = CALL2(CALL0(p, get_stdout), read, buf, sizeof(buf) - 1);
+        if (n > 0)
+        {
+            buf[n] = '\0';
+            printf("%s", buf);
+        }
+
+        CALL0(p, wait);
+        printf("exit code %d\n", CALL0(p, get_exit_code));
+    }
+
+    REMOVE(p);
+}
+
+// run a Runnable in a forked copy of this process; its result is the exit code
+void fork_demo(Runnable *job)
+{
+    Process *p = process_new_runnable(job);
+    CALL0(p, start);
+    CALL0(p, wait);
+    REMOVE(p);
+}
+
+// pipes on their own
+void pipe_demo(void)
+{
+    Stream *reader, *writer;
+    if (processstream_pipe(&reader, &writer))
+    {
+        CALL1(writer, fprint, "hello");
+        CALL0(writer, close);
+
+        char buf[8];
+        CALL2(reader, read, buf, sizeof(buf));
+
+        REMOVE(reader);
+        REMOVE(writer);
+    }
+}
+```
+
 ### Semaphores
 
 ```c

@@ -63,6 +63,36 @@ long sys_kill(long pid, int sig)
     return syscall(__NR_kill, pid, (long)sig);
 }
 
+long sys_pipe2(int fds[2], int flags)
+{
+    return syscall(__NR_pipe2, (long)fds, (long)flags);
+}
+
+long sys_dup2(int oldfd, int newfd)
+{
+    if (oldfd == newfd)
+    {
+        long r = syscall(__NR_fcntl, (long)oldfd, 1L /* F_GETFD */);
+        return r < 0 ? r : (long)newfd;
+    }
+    return syscall(__NR_dup3, (long)oldfd, (long)newfd, 0L);
+}
+
+long sys_fork(void)
+{
+    return syscall(__NR_clone, (long)XXC_SIGCHLD, 0L, 0L, 0L, 0L);
+}
+
+long sys_wait4(long pid, int *status, int options)
+{
+    return syscall(__NR_wait4, pid, (long)status, (long)options, 0L);
+}
+
+long sys_execve(const char *path, char *const argv[], char *const envp[])
+{
+    return syscall(__NR_execve, (long)path, (long)argv, (long)envp);
+}
+
 void sys_exit(int status)
 {
 #if defined(__NR_exit_group)
