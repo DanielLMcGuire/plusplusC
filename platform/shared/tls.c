@@ -272,7 +272,7 @@ static int tls_snapshot_dynamic(int argc, char **argv)
 
 void __xxc_run_exe_init_array(int argc, char **argv)
 {
-    /* GCOV_EXCL_START: */
+    /* GCOV_EXCL_START */
 #if defined(__linux__)
     char **envp = argv + argc + 1;
     while (*envp) envp++;
