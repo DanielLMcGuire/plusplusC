@@ -1,0 +1,443 @@
+// ++C Runtime Library
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <def.h>
+#include <cio.h>
+#include <str.h>
+#include <mem.h>
+#include <alloc.h>
+#include <env.h>
+#include <class.pph>
+#include <runnable.pph>
+#include <environment.pph>
+#include <process.pph>
+#include "test.h"
+#include "test_util.h"
+
+#if defined(XXC_PROC_POSIX) || defined(_WIN32)
+
+#define ENV_VAR  "XXC_TEST_ENV_VAR"
+#define ENV_GONE "XXC_TEST_ENV_GONE"
+#define ENV_CODE "XXC_T_CODE"
+
+#if defined(_WIN32)
+#define T_EXIT_ENV "exit %XXC_T_CODE%"
+#else
+#define T_EXIT_ENV "exit $XXC_T_CODE"
+#endif
+
+static bool env_is(const char *name, const char *expected)
+{
+    dstr_t v = env_get(name);
+    bool   ok = expected == nullptr ? v.data == nullptr : (v.data != nullptr && strcmp(v.data, expected) == 0);
+    dstr_free(&v);
+    return ok;
+}
+
+static bool test_env_get_set_unset(void)
+{
+    env_unset(ENV_VAR);
+    ASSERT(env_is(ENV_VAR, nullptr));
+
+    ASSERT(env_set(ENV_VAR, "one", true) == 0);
+    ASSERT(env_is(ENV_VAR, "one"));
+
+    ASSERT(env_set(ENV_VAR, "two", false) == 0);
+    ASSERT(env_is(ENV_VAR, "one"));
+
+    ASSERT(env_set(ENV_VAR, "two", true) == 0);
+    ASSERT(env_is(ENV_VAR, "two"));
+
+    ASSERT(env_set(ENV_VAR, "", true) == 0);
+    dstr_t v = env_get(ENV_VAR);
+    ASSERT(v.data != nullptr && v.len == 0);
+    dstr_free(&v);
+    ASSERT(env_set(ENV_VAR, "kept", false) == 0);
+    ASSERT(env_is(ENV_VAR, ""));
+
+    ASSERT(env_unset(ENV_VAR) == 0);
+    ASSERT(env_is(ENV_VAR, nullptr));
+    ASSERT(env_unset(ENV_VAR) == 0);
+    return true;
+}
+
+static bool test_env_validation(void)
+{
+    ASSERT(env_set(nullptr, "x", true) == -PROC_EINVAL);
+    ASSERT(env_set("", "x", true) == -PROC_EINVAL);
+    ASSERT(env_set("A=B", "x", true) == -PROC_EINVAL);
+    ASSERT(env_set(ENV_VAR, nullptr, true) == -PROC_EINVAL);
+
+    ASSERT(env_unset(nullptr) == -PROC_EINVAL);
+    ASSERT(env_unset("") == -PROC_EINVAL);
+    ASSERT(env_unset("A=B") == -PROC_EINVAL);
+
+    ASSERT(env_get(nullptr).data == nullptr);
+    ASSERT(env_get("").data == nullptr);
+    ASSERT(env_get("A=B").data == nullptr);
+    return true;
+}
+
+static bool test_env_list(void)
+{
+    ASSERT(env_set(ENV_VAR, "listed", true) == 0);
+
+    parr_t list = env_list();
+    bool   found = false;
+    bool   all_pairs = true;
+
+    for (size_t i = 0; i < list.len; i++)
+    {
+        const char *entry = (const char *)list.data[i];
+        if (strcmp(entry, ENV_VAR "=listed") == 0)
+            found = true;
+
+        bool has_eq = false;
+        for (const char *p = entry; *p != '\0'; p++)
+            if (*p == '=')
+                has_eq = true;
+        if (!has_eq)
+            all_pairs = false;
+    }
+
+    parr_free_c_strings(&list);
+    parr_free(&list);
+    env_unset(ENV_VAR);
+
+    ASSERT(found && all_pairs);
+    return true;
+}
+
+static bool test_env_many_variables(void)
+{
+    enum { N = 120 };
+
+    for (int i = 0; i < N; i++)
+    {
+        dstr_t name = dstr_new("XXC_TEST_MANY_");
+        dstr_append_int(&name, i);
+        dstr_t value = dstr_new("v");
+        dstr_append_int(&value, i * 3);
+
+        ASSERT(env_set(name.data, value.data, true) == 0);
+        dstr_free(&name);
+        dstr_free(&value);
+    }
+
+    for (int i = 0; i < N; i++)
+    {
+        dstr_t name = dstr_new("XXC_TEST_MANY_");
+        dstr_append_int(&name, i);
+        dstr_t value = dstr_new("v");
+        dstr_append_int(&value, i * 3);
+
+        bool ok = env_is(name.data, value.data);
+        dstr_free(&name);
+        dstr_free(&value);
+        ASSERT(ok);
+    }
+
+    for (int i = 0; i < N; i++)
+    {
+        dstr_t name = dstr_new("XXC_TEST_MANY_");
+        dstr_append_int(&name, i);
+        ASSERT(env_unset(name.data) == 0);
+        ASSERT(env_is(name.data, nullptr));
+        dstr_free(&name);
+    }
+    return true;
+}
+
+static bool run_exit_env_process(Process *p, int expected)
+{
+    bool ok = CALL1(p, add_arg, T_SH_FLAG) && CALL1(p, add_arg, T_EXIT_ENV) &&
+              CALL0(p, start) && CALL0(p, wait) && CALL0(p, get_exit_code) == expected;
+    return ok;
+}
+
+static bool test_env_inherited_by_child(void)
+{
+    ASSERT(env_set(ENV_CODE, "7", true) == 0);
+
+    Process *p = process_new(T_SH);
+    bool ok = run_exit_env_process(p, 7);
+    REMOVE(p);
+
+    env_unset(ENV_CODE);
+    ASSERT(ok);
+    return true;
+}
+
+static bool test_environment_basic(void)
+{
+    Environment *e = environment_new();
+    ASSERT(e != nullptr);
+
+    ASSERT(CALL0(e, size) == 0 && !CALL1(e, has, "A"));
+    ASSERT_STR_EQ(CALL2(e, get_or, "A", "fallback"), "fallback");
+    ASSERT(CALL1(e, get, "A").data == nullptr);
+    ASSERT(CALL1(e, entry_at, 0) == nullptr);
+
+    ASSERT(CALL2(e, set, "A", "1"));
+    ASSERT(CALL2(e, set, "B", "2"));
+    ASSERT(CALL0(e, size) == 2 && CALL1(e, has, "A") && CALL1(e, has, "B"));
+    ASSERT_STR_EQ(CALL2(e, get_or, "A", "fallback"), "1");
+
+    dstr_t v = CALL1(e, get, "B");
+    ASSERT(v.data != nullptr && strcmp(v.data, "2") == 0);
+    dstr_free(&v);
+
+    ASSERT_STR_EQ(CALL1(e, entry_at, 0), "A=1");
+    ASSERT_STR_EQ(CALL1(e, entry_at, 1), "B=2");
+    ASSERT(CALL1(e, entry_at, 2) == nullptr);
+
+    ASSERT(CALL2(e, set, "A", "9"));
+    ASSERT(CALL0(e, size) == 2);
+    ASSERT_STR_EQ(CALL1(e, entry_at, 0), "A=9");
+
+    ASSERT(CALL1(e, unset, "A"));
+    ASSERT(!CALL1(e, unset, "A"));
+    ASSERT(CALL0(e, size) == 1 && !CALL1(e, has, "A"));
+    ASSERT_STR_EQ(CALL1(e, entry_at, 0), "B=2");
+
+    ASSERT(!CALL2(e, set, "", "x"));
+    ASSERT(!CALL2(e, set, nullptr, "x"));
+    ASSERT(!CALL2(e, set, "A=B", "x"));
+    ASSERT(!CALL2(e, set, "N", nullptr));
+    ASSERT(!CALL1(e, has, ""));
+    ASSERT(CALL1(e, get, "A=B").data == nullptr);
+    ASSERT_STR_EQ(CALL2(e, get_or, "", "fb"), "fb");
+    ASSERT(!CALL1(e, unset, ""));
+    ASSERT(CALL0(e, size) == 1);
+
+    char **envp = CALL0(e, to_envp);
+    ASSERT(envp != nullptr);
+    ASSERT_STR_EQ(envp[0], "B=2");
+    ASSERT(envp[1] == nullptr);
+    free(envp);
+
+    CALL0(e, clear);
+    ASSERT(CALL0(e, size) == 0);
+    envp = CALL0(e, to_envp);
+    ASSERT(envp != nullptr && envp[0] == nullptr);
+    free(envp);
+
+    for (int i = 0; i < 40; i++)
+    {
+        dstr_t name = dstr_new("K");
+        dstr_append_int(&name, i);
+        ASSERT(CALL2(e, set, name.data, "v"));
+        dstr_free(&name);
+    }
+    ASSERT(CALL0(e, size) == 40 && CALL1(e, has, "K39"));
+
+#if defined(_WIN32)
+    ASSERT(CALL1(e, has, "k5"));
+    ASSERT(CALL2(e, set, "k5", "w"));
+    ASSERT(CALL0(e, size) == 40);
+    ASSERT_STR_EQ(CALL2(e, get_or, "K5", ""), "w");
+#else
+    ASSERT(!CALL1(e, has, "k5"));
+    ASSERT(CALL2(e, set, "k5", "w"));
+    ASSERT(CALL0(e, size) == 41);
+#endif
+
+    REMOVE(e);
+    return true;
+}
+
+static bool test_environment_current_and_copy(void)
+{
+    ASSERT(env_set(ENV_VAR, "snap", true) == 0);
+
+    Environment *snap = environment_current();
+    ASSERT(snap != nullptr);
+    ASSERT(CALL1(snap, has, ENV_VAR));
+    ASSERT_STR_EQ(CALL2(snap, get_or, ENV_VAR, ""), "snap");
+
+    parr_t list = env_list();
+    ASSERT(CALL0(snap, size) == list.len);
+    parr_free_c_strings(&list);
+    parr_free(&list);
+
+    ASSERT(CALL2(snap, set, ENV_VAR, "changed"));
+    ASSERT(env_is(ENV_VAR, "snap"));
+    ASSERT(CALL1(snap, unset, ENV_VAR));
+    ASSERT(env_is(ENV_VAR, "snap"));
+
+    ASSERT(CALL2(snap, set, ENV_VAR, "orig"));
+    Environment *copy = environment_copy(snap);
+    ASSERT(copy != nullptr && CALL0(copy, size) == CALL0(snap, size));
+    ASSERT(CALL2(copy, set, ENV_VAR, "other"));
+    ASSERT_STR_EQ(CALL2(snap, get_or, ENV_VAR, ""), "orig");
+    ASSERT_STR_EQ(CALL2(copy, get_or, ENV_VAR, ""), "other");
+    ASSERT(environment_copy(nullptr) == nullptr);
+
+    env_unset(ENV_VAR);
+    REMOVE(copy);
+    REMOVE(snap);
+    return true;
+}
+
+static bool test_environment_apply(void)
+{
+    ASSERT(env_set(ENV_VAR, "before", true) == 0);
+    ASSERT(env_set(ENV_GONE, "g", true) == 0);
+
+    Environment *saved = environment_current();
+    Environment *e     = environment_current();
+    ASSERT(saved != nullptr && e != nullptr);
+
+    ASSERT(CALL2(e, set, ENV_VAR, "after"));
+    ASSERT(CALL2(e, set, "XXC_TEST_ENV_NEW", "n"));
+    ASSERT(CALL1(e, unset, ENV_GONE));
+
+    ASSERT(CALL0(e, apply));
+    ASSERT(env_is(ENV_VAR, "after"));
+    ASSERT(env_is("XXC_TEST_ENV_NEW", "n"));
+    ASSERT(env_is(ENV_GONE, nullptr));
+
+    ASSERT(CALL0(saved, apply));
+    ASSERT(env_is(ENV_VAR, "before"));
+    ASSERT(env_is("XXC_TEST_ENV_NEW", nullptr));
+    ASSERT(env_is(ENV_GONE, "g"));
+
+    env_unset(ENV_VAR);
+    env_unset(ENV_GONE);
+    REMOVE(e);
+    REMOVE(saved);
+    return true;
+}
+
+static bool test_process_environment(void)
+{
+    ASSERT(env_set(ENV_CODE, "3", true) == 0);
+
+    Process *a = process_new(T_SH);
+    ASSERT(run_exit_env_process(a, 3));
+
+    ASSERT(!CALL2(a, set_env, ENV_CODE, "1"));
+    ASSERT(!CALL1(a, unset_env, ENV_CODE));
+    ASSERT(!CALL0(a, clear_env));
+    ASSERT(!CALL1(a, set_environment, nullptr));
+    REMOVE(a);
+
+    Process *b = process_new(T_SH);
+    ASSERT(CALL2(b, set_env, ENV_CODE, "9"));
+    ASSERT(!CALL2(b, set_env, "", "x"));
+    ASSERT(!CALL2(b, set_env, ENV_CODE, nullptr));
+    ASSERT(run_exit_env_process(b, 9));
+    ASSERT(env_is(ENV_CODE, "3"));
+    REMOVE(b);
+
+    Process *c = process_new(T_SH);
+    ASSERT(CALL0(c, clear_env));
+    ASSERT(CALL2(c, set_env, ENV_CODE, "6"));
+    ASSERT(run_exit_env_process(c, 6));
+    REMOVE(c);
+
+    Process *d = process_new(T_SH);
+    ASSERT(CALL1(d, unset_env, ENV_CODE));
+    ASSERT(!CALL1(d->env, has, ENV_CODE));
+    REMOVE(d);
+
+    Environment *e = environment_new();
+    ASSERT(CALL2(e, set, ENV_CODE, "4"));
+    Process *f = process_new(T_SH);
+    ASSERT(CALL1(f, set_environment, e));
+    ASSERT(CALL2(e, set, ENV_CODE, "5"));
+    ASSERT(run_exit_env_process(f, 4));
+    REMOVE(f);
+
+    Process *g = process_new(T_SH);
+    ASSERT(CALL1(g, set_environment, e));
+    ASSERT(CALL1(g, set_environment, nullptr));
+    ASSERT(g->env == nullptr);
+    ASSERT(run_exit_env_process(g, 3));
+    REMOVE(g);
+
+    REMOVE(e);
+    env_unset(ENV_CODE);
+    return true;
+}
+
+#if defined(XXC_PROC_POSIX)
+CLASS(EnvJob, Runnable)
+{
+    BASE(Runnable)
+};
+
+CONSTRUCTOR(EnvJob);
+DECONSTRUCTOR(EnvJob);
+METHOD_PROTO(EnvJob, void *, run, (void *self));
+CLASS_INFO(EnvJob, Runnable);
+
+CONSTRUCTOR(EnvJob)   { SUPER_CTOR(self, Runnable); METHOD_LINK(base, EnvJob, run); }
+DECONSTRUCTOR(EnvJob) { SUPER_DTOR(self, Runnable); }
+
+IMPLEMENT(EnvJob, void *, run, (void *self))
+{
+    (void)self;
+
+    dstr_t v = env_get(ENV_CODE);
+    int code = 99;
+
+    if (v.data != nullptr)
+    {
+        code = 0;
+        for (const char *c = v.data; *c >= '0' && *c <= '9'; c++)
+            code = code * 10 + (*c - '0');
+    }
+
+    dstr_free(&v);
+    return (void *)(intptr_t)code;
+}
+
+static bool test_process_runnable_environment(void)
+{
+    ASSERT(env_set(ENV_CODE, "3", true) == 0);
+
+    EnvJob  *job = NEW(EnvJob);
+    Process *p   = process_new_runnable((Runnable *)job);
+    ASSERT(CALL2(p, set_env, ENV_CODE, "8"));
+    ASSERT(CALL0(p, start) && CALL0(p, wait));
+    ASSERT(CALL0(p, get_exit_code) == 8);
+    ASSERT(env_is(ENV_CODE, "3"));
+    REMOVE(p);
+
+    Process *q = process_new_runnable((Runnable *)job);
+    ASSERT(CALL0(q, clear_env));
+    ASSERT(CALL0(q, start) && CALL0(q, wait));
+    ASSERT(CALL0(q, get_exit_code) == 99);
+    REMOVE(q);
+
+    Process *r = process_new_runnable((Runnable *)job);
+    ASSERT(CALL0(r, start) && CALL0(r, wait));
+    ASSERT(CALL0(r, get_exit_code) == 3);
+    REMOVE(r);
+
+    REMOVE(job);
+    env_unset(ENV_CODE);
+    return true;
+}
+#endif /* XXC_PROC_POSIX */
+#endif /* XXC_PROC_POSIX || _WIN32 */
+
+static void run_env_tests(void)
+{
+#if defined(XXC_PROC_POSIX) || defined(_WIN32)
+    RUN_TEST(test_env_get_set_unset);
+    RUN_TEST(test_env_validation);
+    RUN_TEST(test_env_list);
+    RUN_TEST(test_env_many_variables);
+    RUN_TEST(test_env_inherited_by_child);
+    RUN_TEST(test_environment_basic);
+    RUN_TEST(test_environment_current_and_copy);
+    RUN_TEST(test_environment_apply);
+    RUN_TEST(test_process_environment);
+#endif
+#if defined(XXC_PROC_POSIX)
+    RUN_TEST(test_process_runnable_environment);
+#endif
+}

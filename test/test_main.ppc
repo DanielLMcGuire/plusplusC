@@ -2199,3 +2199,80 @@ static bool test_oop_threads_writing_to_shared_map(void)
     return true;
 }
 
+void run_main_tests(void)
+{
+    RUN_TEST(test_dstr);
+    RUN_TEST(test_iarr);
+    RUN_TEST(test_parr);
+    RUN_TEST(test_formatting);
+    RUN_TEST(test_oop_system);
+    RUN_TEST(test_memory_stream);
+    RUN_TEST(test_fspath);
+    RUN_TEST(test_printf_floats);
+    RUN_TEST(test_printf_ints);
+    RUN_TEST(test_printf_strings);
+    RUN_TEST(test_snprintf_truncation);
+    RUN_TEST(test_dstr_edge_cases);
+
+    RUN_TEST(test_tls_main_thread);
+    RUN_TEST(test_thread_create_join);
+    RUN_TEST(test_thread_identity);
+    RUN_TEST(test_tls_isolation);
+    RUN_TEST(test_many_threads_atomic_counter);
+    RUN_TEST(test_thread_stack_sizes);
+    RUN_TEST(test_thread_detach);
+#if defined(__linux__)
+    RUN_TEST(test_thread_no_mapping_leak);
+#endif
+    RUN_TEST(test_tls_keys);
+
+    RUN_TEST(test_alloc_basics);
+    RUN_TEST(test_alloc_size_classes);
+    RUN_TEST(test_alloc_no_overlap);
+    RUN_TEST(test_alloc_calloc);
+    RUN_TEST(test_alloc_realloc);
+    RUN_TEST(test_alloc_large_objects);
+    RUN_TEST(test_alloc_random_single_thread);
+    RUN_TEST(test_alloc_threads_independent);
+    RUN_TEST(test_alloc_cross_thread_free);
+    RUN_TEST(test_alloc_thread_churn);
+    RUN_TEST(test_alloc_pages_recycled_across_threads);
+#if defined(__linux__) && RSS_CHECKS_MEANINGFUL
+    RUN_TEST(test_alloc_returns_memory_to_os);
+#endif
+
+    RUN_TEST(test_cond_signal_wakes_waiter);
+    RUN_TEST(test_cond_broadcast_wakes_all);
+    RUN_TEST(test_cond_timedwait_times_out);
+    RUN_TEST(test_cond_timedwait_succeeds_before_deadline);
+    RUN_TEST(test_cond_wait_preserves_recursive_depth);
+    RUN_TEST(test_cond_producer_consumer);
+    RUN_TEST(test_sem_basic);
+    RUN_TEST(test_sem_timedwait);
+    RUN_TEST(test_sem_wakes_exactly_n);
+    RUN_TEST(test_sem_bounds_concurrency);
+
+    RUN_TEST(test_map_basic);
+    RUN_TEST(test_map_null_value_disambiguation);
+    RUN_TEST(test_map_binary_keys);
+    RUN_TEST(test_map_growth_and_rehash);
+    RUN_TEST(test_map_collisions);
+    RUN_TEST(test_map_iterate);
+    RUN_TEST(test_map_value_free);
+    RUN_TEST(test_map_random_vs_reference);
+    RUN_TEST(test_map_hash_bytes);
+
+    RUN_TEST(test_oop_map_basic);
+    RUN_TEST(test_oop_map_null_value_disambiguation);
+    RUN_TEST(test_oop_map_binary_keys);
+    RUN_TEST(test_oop_map_iterate);
+    RUN_TEST(test_oop_map_owns_objects_via_c_delete);
+    RUN_TEST(test_oop_thread_runnable_basic);
+    RUN_TEST(test_oop_thread_fn);
+    RUN_TEST(test_oop_thread_multiple_concurrent);
+    RUN_TEST(test_oop_thread_start_detached);
+    RUN_TEST(test_oop_thread_destructor_auto_detaches);
+    RUN_TEST(test_oop_thread_reused_runnable);
+    RUN_TEST(test_oop_thread_start_guards);
+    RUN_TEST(test_oop_threads_writing_to_shared_map);
+}
