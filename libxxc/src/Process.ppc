@@ -15,6 +15,7 @@ CONSTRUCTOR(Process)
     self->target        = nullptr;
     self->owns_target   = false;
     self->redirect_mask = 0;
+    self->env           = nullptr;
 
     self->child_stdin  = nullptr;
     self->child_stdout = nullptr;
@@ -28,6 +29,10 @@ CONSTRUCTOR(Process)
 
     METHOD_LINK(Process, add_arg);
     METHOD_LINK(Process, redirect);
+    METHOD_LINK(Process, set_env);
+    METHOD_LINK(Process, unset_env);
+    METHOD_LINK(Process, clear_env);
+    METHOD_LINK(Process, set_environment);
     METHOD_LINK(Process, start);
     METHOD_LINK(Process, wait);
     METHOD_LINK(Process, poll);
@@ -47,6 +52,7 @@ DECONSTRUCTOR(Process)
     if (self->started && !self->finished)
         Process__poll(self);
 
+    REMOVE(self->env);
     REMOVE(self->child_stdin);
     REMOVE(self->child_stdout);
     REMOVE(self->child_stderr);
@@ -82,6 +88,77 @@ IMPLEMENT(Process, bool, redirect, (void *self, u32 mask))
     return true;
 }
 
+IMPLEMENT(Process, bool, set_env, (void *self, const char *name, const char *value))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    if (this->env == nullptr)
+    {
+        this->env = environment_current();
+        if (this->env == nullptr)
+            return false; /* GCOV_EXCL_LINE */
+    }
+
+    return CALL2(this->env, set, name, value);
+}
+
+IMPLEMENT(Process, bool, unset_env, (void *self, const char *name))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    if (this->env == nullptr)
+    {
+        this->env = environment_current();
+        if (this->env == nullptr)
+            return false; /* GCOV_EXCL_LINE */
+    }
+
+    CALL1(this->env, unset, name);
+    return true;
+}
+
+IMPLEMENT(Process, bool, clear_env, (void *self))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    Environment *empty = environment_new();
+    if (empty == nullptr)
+        return false; /* GCOV_EXCL_LINE */
+
+    REMOVE(this->env);
+    this->env = empty;
+    return true;
+}
+
+IMPLEMENT(Process, bool, set_environment, (void *self, const Environment *environment))
+{
+    Process *this = (Process *)self;
+
+    if (this->started)
+        return false;
+
+    Environment *copy = nullptr;
+    if (environment != nullptr)
+    {
+        copy = environment_copy(environment);
+        if (copy == nullptr)
+            return false; /* GCOV_EXCL_LINE */
+    }
+
+    REMOVE(this->env);
+    this->env = copy;
+    return true;
+}
+
 static void close_pair(proc_fd_t p[2])
 {
     if (p[0] != PROC_FD_INVALID)
@@ -94,7 +171,12 @@ static void close_pair(proc_fd_t p[2])
 
 static bool pair_clear_of_stdio(const proc_fd_t p[2])
 {
+#if defined(_WIN32)
+    (void)p;
+    return true;
+#else
     return p[0] > 2 && p[1] > 2;
+#endif
 }
 
 static XXC_NORETURN void run_child(Process *p, u32 mask, bool merge,
@@ -114,6 +196,9 @@ static XXC_NORETURN void run_child(Process *p, u32 mask, bool merge,
 
     if (ok && (mask & PROCESS_STDERR))
         ok = proc_dup2(err_p[1], 2) >= 0;
+
+    if (ok && p->env != nullptr)
+        ok = CALL0(p->env, apply);
 
     close_pair(in_p);
     close_pair(out_p);
@@ -155,6 +240,7 @@ IMPLEMENT(Process, bool, start, (void *self))
     ProcessStream *s_err = nullptr;
 
     char      **argv = nullptr;
+    char      **envp = nullptr;
     proc_pid_t  pid  = -1;
     bool        ok   = false;
 
@@ -209,9 +295,19 @@ IMPLEMENT(Process, bool, start, (void *self))
             argv[i + 1] = (char *)this->args.data[i];
         argv[this->args.len + 1] = nullptr;
 
+        if (this->env != nullptr)
+        {
+            envp = CALL0(this->env, to_envp);
+            /* GCOV_EXCL_START */
+            if (envp == nullptr)
+                goto done;
+            /* GCOV_EXCL_STOP */
+        }
+
         proc_spawn_t spec = PROC_SPAWN_INIT;
         spec.path  = this->program.data;
         spec.argv  = argv;
+        spec.envp  = envp;
         spec.flags = PROC_SPAWN_SEARCH_PATH;
 
         if (mask & PROCESS_STDIN)
@@ -278,6 +374,7 @@ done:
     REMOVE(s_out);
     REMOVE(s_err);
     free(argv);
+    free(envp);
 
     return ok;
 }

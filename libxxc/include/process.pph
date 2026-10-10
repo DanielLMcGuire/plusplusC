@@ -9,6 +9,7 @@
 #include <class.pph>
 #include <stream.pph>
 #include <runnable.pph>
+#include <environment.pph>
 #include <dstr.h>
 #include <parr.h>
 #include <proc.h>
@@ -48,6 +49,7 @@ CLASS(Process)
     FIELD(Runnable *,      target)
     FIELD(bool,            owns_target)
     FIELD(u32,             redirect_mask)
+    FIELD(Environment *,   env)
 
     FIELD(ProcessStream *, child_stdin)
     FIELD(ProcessStream *, child_stdout)
@@ -61,6 +63,10 @@ CLASS(Process)
 
     METHOD(bool,           add_arg,         (void *self, const char *arg))
     METHOD(bool,           redirect,        (void *self, u32 mask))
+    METHOD(bool,           set_env,         (void *self, const char *name, const char *value))
+    METHOD(bool,           unset_env,       (void *self, const char *name))
+    METHOD(bool,           clear_env,       (void *self))
+    METHOD(bool,           set_environment, (void *self, const Environment *environment))
     METHOD(bool,           start,           (void *self))
     METHOD(bool,           wait,            (void *self))
     METHOD(bool,           poll,            (void *self))
@@ -79,6 +85,10 @@ CLASS_EXPORT(Process);
 
 METHOD_PROTO(Process, bool,           add_arg,         (void *self, const char *arg));
 METHOD_PROTO(Process, bool,           redirect,        (void *self, u32 mask));
+METHOD_PROTO(Process, bool,           set_env,         (void *self, const char *name, const char *value));
+METHOD_PROTO(Process, bool,           unset_env,       (void *self, const char *name));
+METHOD_PROTO(Process, bool,           clear_env,       (void *self));
+METHOD_PROTO(Process, bool,           set_environment, (void *self, const Environment *environment));
 METHOD_PROTO(Process, bool,           start,           (void *self));
 METHOD_PROTO(Process, bool,           wait,            (void *self));
 METHOD_PROTO(Process, bool,           poll,            (void *self));

@@ -1,0 +1,348 @@
+// ++C Runtime Library (xxCRT)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#include <environment.pph>
+#include <alloc.h>
+#include <mem.h>
+#include <str.h>
+
+#define NOT_FOUND ((size_t)-1)
+
+CLASS_INFO_ROOT(Environment);
+
+CONSTRUCTOR(Environment)
+{
+    self->items = nullptr;
+    self->count = 0;
+    self->cap   = 0;
+
+    METHOD_LINK(Environment, has);
+    METHOD_LINK(Environment, get);
+    METHOD_LINK(Environment, get_or);
+    METHOD_LINK(Environment, set);
+    METHOD_LINK(Environment, unset);
+    METHOD_LINK(Environment, size);
+    METHOD_LINK(Environment, entry_at);
+    METHOD_LINK(Environment, clear);
+    METHOD_LINK(Environment, to_envp);
+    METHOD_LINK(Environment, apply);
+}
+
+DECONSTRUCTOR(Environment)
+{
+    Environment__clear(self);
+    free(self->items);
+}
+
+static bool valid_name(const char *name)
+{
+    if (name == nullptr || name[0] == '\0')
+        return false;
+
+    for (const char *p = name; *p != '\0'; p++)
+    {
+        if (*p == '=')
+            return false;
+    }
+    return true;
+}
+
+static char fold(char c)
+{
+#if defined(_WIN32)
+    if (c >= 'a' && c <= 'z')
+        return (char)(c - 'a' + 'A');
+#endif
+    return c;
+}
+
+static size_t find(const Environment *e, const char *name, size_t nlen)
+{
+    for (size_t i = 0; i < e->count; i++)
+    {
+        const char *entry = e->items[i];
+        size_t k = 0;
+
+        while (k < nlen && fold(entry[k]) == fold(name[k]))
+            k++;
+
+        if (k == nlen && entry[nlen] == '=')
+            return i;
+    }
+    return NOT_FOUND;
+}
+
+static bool append_owned(Environment *e, char *entry)
+{
+    if (e->count + 1 >= e->cap)
+    {
+        size_t cap = e->cap ? e->cap * 2 : 16;
+        char **grown = (char **)realloc(e->items, cap * sizeof(char *));
+
+        /* GCOV_EXCL_START */
+        if (grown == nullptr)
+        {
+            free(entry);
+            return false;
+        }
+        /* GCOV_EXCL_STOP */
+
+        e->items = grown;
+        e->cap   = cap;
+    }
+
+    e->items[e->count++] = entry;
+    return true;
+}
+
+static char *dup_cstr(const char *s)
+{
+    size_t len = strlen(s) + 1;
+    char  *out = (char *)malloc(len);
+
+    if (out != nullptr) /* GCOV_EXCL_LINE */
+        memcpy(out, s, len);
+    return out;
+}
+
+IMPLEMENT(Environment, bool, has, (void *self, const char *name))
+{
+    if (!valid_name(name))
+        return false;
+
+    return find((Environment *)self, name, strlen(name)) != NOT_FOUND;
+}
+
+IMPLEMENT(Environment, dstr_t, get, (void *self, const char *name))
+{
+    dstr_t none = { nullptr, 0, 0 };
+
+    if (!valid_name(name))
+        return none;
+
+    Environment *e  = (Environment *)self;
+    size_t       n  = strlen(name);
+    size_t       at = find(e, name, n);
+
+    if (at == NOT_FOUND)
+        return none;
+
+    return dstr_new(e->items[at] + n + 1);
+}
+
+IMPLEMENT(Environment, const char *, get_or, (void *self, const char *name, const char *fallback))
+{
+    if (!valid_name(name))
+        return fallback;
+
+    Environment *e  = (Environment *)self;
+    size_t       n  = strlen(name);
+    size_t       at = find(e, name, n);
+
+    return at == NOT_FOUND ? fallback : e->items[at] + n + 1;
+}
+
+IMPLEMENT(Environment, bool, set, (void *self, const char *name, const char *value))
+{
+    if (!valid_name(name) || value == nullptr)
+        return false;
+
+    Environment *e    = (Environment *)self;
+    size_t       nlen = strlen(name);
+    size_t       vlen = strlen(value);
+
+    char *entry = (char *)malloc(nlen + 1 + vlen + 1);
+    if (entry == nullptr)
+        return false; /* GCOV_EXCL_LINE */
+
+    memcpy(entry, name, nlen);
+    entry[nlen] = '=';
+    memcpy(entry + nlen + 1, value, vlen + 1);
+
+    size_t at = find(e, name, nlen);
+    if (at != NOT_FOUND)
+    {
+        free(e->items[at]);
+        e->items[at] = entry;
+        return true;
+    }
+
+    return append_owned(e, entry);
+}
+
+IMPLEMENT(Environment, bool, unset, (void *self, const char *name))
+{
+    if (!valid_name(name))
+        return false;
+
+    Environment *e  = (Environment *)self;
+    size_t       at = find(e, name, strlen(name));
+
+    if (at == NOT_FOUND)
+        return false;
+
+    free(e->items[at]);
+    memmove(&e->items[at], &e->items[at + 1], (e->count - at - 1) * sizeof(char *));
+    e->count--;
+    return true;
+}
+
+IMPLEMENT(Environment, size_t, size, (void *self))
+{
+    return ((Environment *)self)->count;
+}
+
+IMPLEMENT(Environment, const char *, entry_at, (void *self, size_t index))
+{
+    Environment *e = (Environment *)self;
+
+    return index < e->count ? e->items[index] : nullptr;
+}
+
+IMPLEMENT(Environment, void, clear, (void *self))
+{
+    Environment *e = (Environment *)self;
+
+    for (size_t i = 0; i < e->count; i++)
+        free(e->items[i]);
+
+    e->count = 0;
+}
+
+IMPLEMENT(Environment, char **, to_envp, (void *self))
+{
+    Environment *e = (Environment *)self;
+
+    char **envp = (char **)malloc((e->count + 1) * sizeof(char *));
+    if (envp == nullptr)
+        return nullptr; /* GCOV_EXCL_LINE */
+
+    for (size_t i = 0; i < e->count; i++)
+        envp[i] = e->items[i];
+    envp[e->count] = nullptr;
+
+    return envp;
+}
+
+static char *name_of(const char *entry)
+{
+    size_t n = 0;
+    while (entry[n] != '\0' && entry[n] != '=')
+        n++;
+
+    char *name = (char *)malloc(n + 1);
+    if (name != nullptr) /* GCOV_EXCL_LINE */
+    {
+        memcpy(name, entry, n);
+        name[n] = '\0';
+    }
+    return name;
+}
+
+IMPLEMENT(Environment, bool, apply, (void *self))
+{
+    Environment *e  = (Environment *)self;
+    bool         ok = true;
+
+    parr_t now = env_list();
+    for (size_t i = 0; i < now.len; i++)
+    {
+        char *name = name_of((const char *)now.data[i]);
+
+        /* GCOV_EXCL_START */
+        if (name == nullptr)
+        {
+            ok = false;
+            continue;
+        }
+        /* GCOV_EXCL_STOP */
+
+        if (find(e, name, strlen(name)) == NOT_FOUND && env_unset(name) < 0)
+            ok = false; /* GCOV_EXCL_LINE */
+
+        free(name);
+    }
+    parr_free_c_strings(&now);
+    parr_free(&now);
+
+    for (size_t i = 0; i < e->count; i++)
+    {
+        char *name = name_of(e->items[i]);
+
+        /* GCOV_EXCL_START */
+        if (name == nullptr)
+        {
+            ok = false;
+            continue;
+        }
+        /* GCOV_EXCL_STOP */
+
+        if (env_set(name, e->items[i] + strlen(name) + 1, true) < 0)
+            ok = false; /* GCOV_EXCL_LINE */
+
+        free(name);
+    }
+
+    return ok;
+}
+
+Environment *environment_new(void)
+{
+    return NEW(Environment);
+}
+
+Environment *environment_current(void)
+{
+    Environment *e = NEW(Environment);
+    if (e == nullptr)
+        return nullptr; /* GCOV_EXCL_LINE */
+
+    parr_t list = env_list();
+    bool   ok   = true;
+
+    for (size_t i = 0; i < list.len; i++)
+    {
+        char *copy = dup_cstr((const char *)list.data[i]);
+        if (copy == nullptr || !append_owned(e, copy))
+            ok = false; /* GCOV_EXCL_LINE */
+    }
+
+    parr_free_c_strings(&list);
+    parr_free(&list);
+
+    /* GCOV_EXCL_START */
+    if (!ok)
+    {
+        REMOVE(e);
+        return nullptr;
+    }
+    /* GCOV_EXCL_STOP */
+
+    return e;
+}
+
+Environment *environment_copy(const Environment *source)
+{
+    if (source == nullptr)
+        return nullptr;
+
+    Environment *e = NEW(Environment);
+    if (e == nullptr)
+        return nullptr; /* GCOV_EXCL_LINE */
+
+    for (size_t i = 0; i < source->count; i++)
+    {
+        char *copy = dup_cstr(source->items[i]);
+
+        /* GCOV_EXCL_START */
+        if (copy == nullptr || !append_owned(e, copy))
+        {
+            REMOVE(e);
+            return nullptr;
+        }
+        /* GCOV_EXCL_STOP */
+    }
+
+    return e;
+}

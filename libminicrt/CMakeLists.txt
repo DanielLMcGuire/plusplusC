@@ -47,6 +47,9 @@ if (NOT TARGET minicrt)
 
         ${CMAKE_CURRENT_SOURCE_DIR}/src/proc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/include/proc.h
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/env.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/env.h
     )
 
     add_library(minicrt_objects OBJECT ${MINICRT_CORE_SOURCES})

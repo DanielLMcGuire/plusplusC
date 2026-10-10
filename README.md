@@ -443,6 +443,8 @@ void thread_demo(void)
 
 ### Processes and pipes
 
+Linux, FreeBSD and Windows. `proc.h` has the raw layer (`proc_pipe`, `proc_fork`, `proc_wait`, `proc_spawn`, ...), which returns `-PROC_Exxx` on failure.
+
 ```c
 #include <process.pph>
 #include <ios.pph>
@@ -503,6 +505,41 @@ void pipe_demo(void)
 }
 ```
 
+On windows, `proc_fork` fails with `-PROC_ENOSYS` and a `Process` made with `process_new_runnable` cannot start. Pipes, `proc_spawn` and programs ran via `Process` however work the same on Linux, Windows, and FreeBSD.
+
+Writing to a pipe whose reader is gone raises `SIGPIPE` on Linux and FreeBSD (Windows just returns an error), ignore it with `signal(SIGPIPE, SIG_IGN)` to get an error return instead. After a fork only the calling thread exists in the child.
+
+### Environment
+
+`env.h` reads and changes this process's environment; `Environment` is an editable copy you can hand to a child.
+
+```c
+#include <env.h>
+#include <process.pph>
+
+void env_demo(void)
+{
+    env_set("MODE", "fast", true);
+    dstr_t mode = env_get("MODE");
+    dstr_free(&mode);
+    env_unset("MODE");
+
+    Environment *e = environment_current();
+    CALL2(e, set, "MODE", "slow");
+    const char *m = CALL2(e, get_or, "MODE", "none");
+    (void)m;
+    REMOVE(e);
+
+    Process *p = process_new("mytool");
+    CALL2(p, set_env, "MODE", "slow");
+    CALL0(p, start);
+    CALL0(p, wait);
+    REMOVE(p);
+}
+```
+
+`clear_env()` gives a child an empty environment, `set_environment()` a copy of a whole `Environment`, and `Environment::apply` makes the process match the given enviroment class. Names are case-insensitive on Windows only.
+
 ### Semaphores
 
 ```c
@@ -527,9 +564,7 @@ void semaphore_demo(void)
 
     // try to acquire without blocking
     if (sem_trywait(&sem) == SEM_SUCCESS) 
-    {
         sem_post(&sem);
-    }
 
     // destroy when finished
     sem_destroy(&sem);

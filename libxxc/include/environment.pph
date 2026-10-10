@@ -1,0 +1,48 @@
+// ++C Runtime Library (xxCRT)
+// Copyright 2026 Daniel McGuire
+// Licensed under the MIT License
+
+#ifndef ENVIRONMENT_H
+#define ENVIRONMENT_H
+
+#include <def.h>
+#include <class.pph>
+#include <dstr.h>
+#include <env.h>
+
+CLASS(Environment)
+{
+    FIELD(char **, items)
+    FIELD(size_t,  count)
+    FIELD(size_t,  cap)
+
+    METHOD(bool,         has,      (void *self, const char *name))
+    METHOD(dstr_t,       get,      (void *self, const char *name))
+    METHOD(const char *, get_or,   (void *self, const char *name, const char *fallback))
+    METHOD(bool,         set,      (void *self, const char *name, const char *value))
+    METHOD(bool,         unset,    (void *self, const char *name))
+    METHOD(size_t,       size,     (void *self))
+    METHOD(const char *, entry_at, (void *self, size_t index))
+    METHOD(void,         clear,    (void *self))
+    METHOD(char **,      to_envp,  (void *self))
+    METHOD(bool,         apply,    (void *self))
+};
+
+CLASS_EXPORT(Environment);
+
+METHOD_PROTO(Environment, bool,         has,      (void *self, const char *name));
+METHOD_PROTO(Environment, dstr_t,       get,      (void *self, const char *name));
+METHOD_PROTO(Environment, const char *, get_or,   (void *self, const char *name, const char *fallback));
+METHOD_PROTO(Environment, bool,         set,      (void *self, const char *name, const char *value));
+METHOD_PROTO(Environment, bool,         unset,    (void *self, const char *name));
+METHOD_PROTO(Environment, size_t,       size,     (void *self));
+METHOD_PROTO(Environment, const char *, entry_at, (void *self, size_t index));
+METHOD_PROTO(Environment, void,         clear,    (void *self));
+METHOD_PROTO(Environment, char **,      to_envp,  (void *self));
+METHOD_PROTO(Environment, bool,         apply,    (void *self));
+
+Environment *environment_new(void);
+Environment *environment_current(void);
+Environment *environment_copy(const Environment *source);
+
+#endif /* ENVIRONMENT_H */
